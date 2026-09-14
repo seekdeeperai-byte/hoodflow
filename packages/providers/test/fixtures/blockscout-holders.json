@@ -1,0 +1,8 @@
+{
+  "items": [
+    { "address": { "hash": "0xaaa1" }, "value": "180000000000000000000000" },
+    { "address": { "hash": "0xaaa2" }, "value": "90000000000000000000000" },
+    { "address": { "hash": "0xaaa3" }, "value": "70000000000000000000000" }
+  ],
+  "next_page_params": null
+}

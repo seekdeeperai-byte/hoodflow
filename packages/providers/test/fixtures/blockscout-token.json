@@ -1,0 +1,9 @@
+{
+  "address": "0x1111111111111111111111111111111111111111",
+  "name": "Example Token",
+  "symbol": "EXT",
+  "decimals": "18",
+  "total_supply": "1000000000000000000000000",
+  "holders_count": "842",
+  "type": "ERC-20"
+}

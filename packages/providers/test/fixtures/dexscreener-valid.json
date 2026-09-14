@@ -1,0 +1,25 @@
+[
+  {
+    "chainId": "robinhoodchain",
+    "dexId": "uniswap",
+    "pairAddress": "0x4444444444444444444444444444444444444444",
+    "baseToken": { "address": "0x1111111111111111111111111111111111111111", "name": "Example Token", "symbol": "EXT" },
+    "priceUsd": "0.0421",
+    "txns": { "h24": { "buys": 340, "sells": 110 } },
+    "volume": { "h24": 812000 },
+    "priceChange": { "h24": 22.5 },
+    "liquidity": { "usd": 96000, "base": 1000000, "quote": 48 },
+    "fdv": 4210000,
+    "marketCap": 3400000,
+    "pairCreatedAt": 1750000000000
+  },
+  {
+    "chainId": "robinhoodchain",
+    "dexId": "sushiswap",
+    "pairAddress": "0x5555555555555555555555555555555555555555",
+    "baseToken": { "address": "0x1111111111111111111111111111111111111111", "name": "Example Token", "symbol": "EXT" },
+    "priceUsd": "0.0420",
+    "liquidity": { "usd": 4000 },
+    "volume": { "h24": 9000 }
+  }
+]

@@ -1,0 +1,35 @@
+{
+  "code": 1,
+  "message": "OK",
+  "result": {
+    "0x1111111111111111111111111111111111111111": {
+      "token_name": "Example Token",
+      "token_symbol": "EXT",
+      "total_supply": "1000000000000000000000000",
+      "is_open_source": "1",
+      "is_proxy": "0",
+      "is_mintable": "0",
+      "owner_address": "0x2222222222222222222222222222222222222222",
+      "can_take_back_ownership": "0",
+      "hidden_owner": "0",
+      "is_honeypot": "0",
+      "is_blacklisted": "0",
+      "is_whitelisted": "0",
+      "is_anti_whale": "0",
+      "transfer_pausable": "0",
+      "trading_cooldown": "0",
+      "buy_tax": "0.03",
+      "sell_tax": "0.03",
+      "holder_count": "842",
+      "holders": [
+        { "address": "0xaaa1", "percent": "0.18", "is_contract": 0, "is_locked": 0 },
+        { "address": "0xaaa2", "percent": "0.09", "is_contract": 0, "is_locked": 0 },
+        { "address": "0xaaa3", "percent": "0.07", "is_contract": 0, "is_locked": 0 }
+      ],
+      "lp_holder_count": "3",
+      "lp_total_supply": "500000000000000000000",
+      "creator_address": "0x3333333333333333333333333333333333333333",
+      "creator_percent": "0.02"
+    }
+  }
+}
