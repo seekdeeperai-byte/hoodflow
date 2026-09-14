@@ -15,9 +15,12 @@ export interface DexScreenerClientOptions {
 /**
  * DexScreener token-pairs client. `chainSlug` is DexScreener's own chain
  * identifier (e.g. "ethereum", "base") — NOT a numeric chain id. Robinhood
- * Chain's DexScreener slug is unverified as of 2026-09-14 (see
- * docs/ARCHITECTURE.md §1); passing an unrecognized/unsupported slug is
- * expected to surface as DATA_UNAVAILABLE (empty result), not a crash.
+ * Chain's slug was confirmed live on 2026-09-14 to be "robinhood" (see
+ * docs/LIVE_VERIFICATION.md — a Phase 0 guess of "robinhoodchain" was
+ * wrong and would have silently produced empty results forever, since an
+ * unrecognized slug and "no pairs yet" are indistinguishable responses).
+ * Passing an unrecognized/unsupported slug is expected to surface as
+ * DATA_UNAVAILABLE (empty result), not a crash.
  */
 export class DexScreenerClient {
   constructor(private readonly opts: DexScreenerClientOptions = {}) {}
@@ -42,17 +45,22 @@ export class DexScreenerClient {
       });
       const latencyMs = Date.now() - start;
 
+      if (status === 403) {
+        // See docs/LIVE_VERIFICATION.md — observed live from a sandboxed verification run
+        // where an upstream network policy, not DexScreener, blocked the request.
+        return unavailable(PROVIDER, DataState.PROVIDER_UNAVAILABLE, "DexScreener returned HTTP 403 (blocked, not a data rejection).", status);
+      }
       if (status === 404) {
-        return unavailable(PROVIDER, DataState.DATA_UNAVAILABLE, "No pairs found for this token on this chain.");
+        return unavailable(PROVIDER, DataState.DATA_UNAVAILABLE, "No pairs found for this token on this chain.", status);
       }
       if (status === 429) {
-        return unavailable(PROVIDER, DataState.RATE_LIMITED, "DexScreener rate limit exceeded.");
+        return unavailable(PROVIDER, DataState.RATE_LIMITED, "DexScreener rate limit exceeded.", status);
       }
       if (status >= 500) {
-        return unavailable(PROVIDER, DataState.PROVIDER_UNAVAILABLE, `DexScreener returned HTTP ${status}.`);
+        return unavailable(PROVIDER, DataState.PROVIDER_UNAVAILABLE, `DexScreener returned HTTP ${status}.`, status);
       }
       if (status >= 400) {
-        return unavailable(PROVIDER, DataState.ERROR, `DexScreener returned HTTP ${status}.`);
+        return unavailable(PROVIDER, DataState.ERROR, `DexScreener returned HTTP ${status}.`, status);
       }
 
       const parsed = DexScreenerPairsResponseSchema.safeParse(json);
@@ -61,16 +69,17 @@ export class DexScreenerClient {
           PROVIDER,
           DataState.ERROR,
           `DexScreener response failed schema validation: ${parsed.error.issues[0]?.message ?? "unknown"}`,
+          status,
         );
       }
 
       const pairs = Array.isArray(parsed.data) ? parsed.data : (parsed.data.pairs ?? []);
       const primary = pickPrimaryPair(pairs ?? []);
       if (!primary) {
-        return unavailable(PROVIDER, DataState.DATA_UNAVAILABLE, "No liquidity pairs indexed for this token yet.");
+        return unavailable(PROVIDER, DataState.DATA_UNAVAILABLE, "No liquidity pairs indexed for this token yet.", status);
       }
 
-      return available(PROVIDER, normalizeDexScreenerPair(primary), latencyMs);
+      return available(PROVIDER, normalizeDexScreenerPair(primary), latencyMs, status);
     } catch (err) {
       if (err instanceof ProviderTimeoutError || err instanceof ProviderHttpError) {
         return unavailable(PROVIDER, DataState.PROVIDER_UNAVAILABLE, err.message);

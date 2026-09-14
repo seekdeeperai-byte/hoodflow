@@ -1,0 +1,64 @@
+import type { TokenIdentity } from "../types/domain.js";
+import { type HistoryStore, type ScanRecord, tokenKey } from "./history-store.js";
+
+/**
+ * In-process implementation, sufficient to prove the HistoryStore
+ * mechanism works end-to-end (see HOLDER_GROWTH wiring in
+ * apps/api/src/pipeline.ts) but NOT durable — everything is lost on
+ * restart, and it will not work correctly across more than one API
+ * process (each process has its own Map). Fine for local dev and for
+ * this phase's verification; a real deployment needs the Postgres-backed
+ * implementation described in docs/HISTORY_SCHEMA.md before this scales
+ * past a single instance.
+ */
+/**
+ * Bounds per-token memory growth. This does NOT bound total memory across
+ * all tokens — an attacker who requests reports for enough distinct
+ * addresses can still grow this store without limit, on top of whatever
+ * the global rate limiter slows down. That's a real, open gap for this
+ * in-memory implementation specifically — see docs/SECURITY.md. A
+ * Postgres-backed HistoryStore with an actual retention policy (see
+ * docs/HISTORY_SCHEMA.md) is the real fix, not a bigger in-memory cap.
+ */
+const MAX_SCANS_PER_TOKEN = 1000;
+
+export class InMemoryHistoryStore implements HistoryStore {
+  private readonly scansByToken = new Map<string, ScanRecord[]>();
+
+  async recordScan(entry: ScanRecord): Promise<void> {
+    const key = tokenKey(entry.snapshot.token);
+    const existing = this.scansByToken.get(key) ?? [];
+    existing.push(entry);
+    existing.sort((a, b) => Date.parse(a.snapshot.capturedAt) - Date.parse(b.snapshot.capturedAt));
+    if (existing.length > MAX_SCANS_PER_TOKEN) {
+      existing.splice(0, existing.length - MAX_SCANS_PER_TOKEN); // drop oldest
+    }
+    this.scansByToken.set(key, existing);
+  }
+
+  async getPreviousSnapshot(token: TokenIdentity, before: string): Promise<ScanRecord | undefined> {
+    const key = tokenKey(token);
+    const scans = this.scansByToken.get(key) ?? [];
+    const beforeMs = Date.parse(before);
+    let latest: ScanRecord | undefined;
+    for (const scan of scans) {
+      const t = Date.parse(scan.snapshot.capturedAt);
+      if (t < beforeMs && (!latest || t > Date.parse(latest.snapshot.capturedAt))) {
+        latest = scan;
+      }
+    }
+    return latest;
+  }
+
+  async getScansSince(token: TokenIdentity, since: string): Promise<ScanRecord[]> {
+    const key = tokenKey(token);
+    const scans = this.scansByToken.get(key) ?? [];
+    const sinceMs = Date.parse(since);
+    return scans.filter((s) => Date.parse(s.snapshot.capturedAt) >= sinceMs);
+  }
+
+  /** Test/debug helper only — not part of the HistoryStore interface. */
+  clear(): void {
+    this.scansByToken.clear();
+  }
+}

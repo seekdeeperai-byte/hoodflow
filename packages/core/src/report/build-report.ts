@@ -1,5 +1,6 @@
 import { analyzeContract } from "../analyzers/contract-analyzer.js";
 import { analyzeLiquidity } from "../analyzers/liquidity-analyzer.js";
+import { analyzeHolders } from "../analyzers/holders-analyzer.js";
 import { DataState, isUsable } from "../types/data-state.js";
 import type { TokenSnapshot } from "../types/domain.js";
 import { buildEvidence } from "../evidence/evidence-engine.js";
@@ -7,6 +8,7 @@ import { buildContractInterpretation, buildInterpretations } from "../interpreta
 import { selectMarketState } from "../interpretation/market-state.js";
 import { detectRelationships } from "../relationships/relationship-engine.js";
 import { Confidence, HypeState, type HoodflowReport, type Signal } from "../types/intelligence.js";
+import { assessFreshness } from "../freshness.js";
 
 const CONFIDENCE_WEIGHT: Record<Confidence, number> = { LOW: 1, MEDIUM: 2, HIGH: 3 };
 
@@ -21,7 +23,14 @@ function dataQualityScore(snapshot: TokenSnapshot): number {
  * -> interpretation -> report) over a single normalized snapshot. This is
  * the function the API route calls; it never talks to providers directly.
  */
-export function buildReport(snapshot: TokenSnapshot): HoodflowReport {
+export interface BuildReportOptions {
+  /** When set, the holders analyzer can compute HOLDER_GROWTH against this prior count (see docs/HISTORY_SCHEMA.md). */
+  previousHolderCount?: number;
+  servedAt?: string;
+}
+
+export function buildReport(snapshot: TokenSnapshot, options: BuildReportOptions = {}): HoodflowReport {
+  const servedAt = options.servedAt ?? new Date().toISOString();
   const signals: Signal[] = [];
   const limitations: string[] = [];
 
@@ -37,7 +46,14 @@ export function buildReport(snapshot: TokenSnapshot): HoodflowReport {
     limitations.push(`Liquidity/market data unavailable (${snapshot.liquidity.state}).`);
   }
 
-  if (!isUsable(snapshot.holders.state)) {
+  if (isUsable(snapshot.holders.state) && snapshot.holders.data) {
+    signals.push(...analyzeHolders(snapshot.holders.data, options.previousHolderCount, snapshot.capturedAt));
+    if (options.previousHolderCount === undefined) {
+      limitations.push(
+        "Holder growth is unavailable — no prior snapshot exists to compare against yet (see docs/HISTORY_SCHEMA.md). This is not the same as holder growth being flat; it is simply unmeasured.",
+      );
+    }
+  } else {
     limitations.push(`Holder distribution data unavailable (${snapshot.holders.state}).`);
   }
 
@@ -52,6 +68,7 @@ export function buildReport(snapshot: TokenSnapshot): HoodflowReport {
   return {
     token: snapshot.token,
     generatedAt: snapshot.capturedAt,
+    dataFreshness: assessFreshness(snapshot.capturedAt, servedAt),
     score: { dataQualityScore: dataQualityScore(snapshot) },
     marketState,
     signals,

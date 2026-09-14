@@ -8,9 +8,18 @@ importers:
 
   .:
     devDependencies:
+      '@hoodflow/core':
+        specifier: workspace:*
+        version: link:packages/core
+      '@hoodflow/providers':
+        specifier: workspace:*
+        version: link:packages/providers
       '@types/node':
         specifier: ^22.10.2
         version: 22.20.2
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.13
       typescript:
         specifier: ^5.7.2
         version: 5.9.3

@@ -38,6 +38,13 @@ describe("DexScreenerClient", () => {
     expect(result.state).toBe(DataState.INVALID_INPUT);
   });
 
+  it("returns PROVIDER_UNAVAILABLE (not ERROR) on HTTP 403", async () => {
+    const client = new DexScreenerClient({ fetchImpl: mockFetchOnce(403, {}) });
+    const result = await client.getTokenLiquidity("robinhood", ADDRESS);
+    expect(result.state).toBe(DataState.PROVIDER_UNAVAILABLE);
+    expect(result.httpStatus).toBe(403);
+  });
+
   it("returns RATE_LIMITED on HTTP 429", async () => {
     const client = new DexScreenerClient({ fetchImpl: mockFetchOnce(429, {}) });
     const result = await client.getTokenLiquidity("robinhoodchain", ADDRESS);

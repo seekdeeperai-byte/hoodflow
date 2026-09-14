@@ -1,8 +1,54 @@
 # HOODFLOW — Security
 
-Status as of this build (Phase 0–3). This is a living document — update it
+Status as of this build (Phase 0–4). This is a living document — update it
 every time a new attack surface (new provider, new route, LLM integration,
 DB) is added.
+
+## Phase 4 recheck (2026-09-14)
+
+Re-audited specifically against what changed this phase: the expanded
+chain registry, the holders analyzer, the HistoryStore, and
+`scripts/verify-live-providers.ts`.
+
+- **SSRF — still closed the same way.** The chain registry
+  (`packages/providers/src/chains.ts`) is a hardcoded map; a request's
+  `chainId` either matches an entry or the route 404s before any provider
+  is called. Nothing about the registry expansion (native currency, known
+  tokens, verification flags) introduces a new way for request input to
+  reach a URL.
+- **New finding, fixed:** a real (blocked) live-provider run surfaced that
+  GoPlus and DexScreener's HTTP 403 responses fell through to the generic
+  `ERROR` state while Blockscout's didn't — meaning two of three providers
+  couldn't distinguish "the request was blocked before reaching you" from
+  "you rejected this specific request." All three now classify 403 as
+  `PROVIDER_UNAVAILABLE` consistently. See docs/LIVE_VERIFICATION.md and
+  the regression tests added for this (`packages/providers/test/*.test.ts`,
+  the "returns PROVIDER_UNAVAILABLE ... on HTTP 403" cases).
+- **New finding, partially mitigated:** `InMemoryHistoryStore` is an
+  unbounded-by-token-count in-memory `Map` — a per-token cap
+  (`MAX_SCANS_PER_TOKEN = 1000`, oldest dropped first) was added to bound
+  memory growth for repeated scans of the *same* token, but there is no
+  cap on the number of *distinct* tokens tracked. An attacker who requests
+  reports for many different addresses can still grow this store without
+  bound, limited only by the global rate limiter (which is per-IP and
+  process-local — see the existing rate-limiting gap below). This is
+  acceptable for local dev and for proving the historical mechanism works,
+  **not** acceptable as the production history store — the real fix is
+  the Postgres-backed implementation with an actual retention policy
+  (docs/HISTORY_SCHEMA.md), not a bigger in-memory cap.
+- **`scripts/verify-live-providers.ts`** reads `GOPLUS_API_KEY`/
+  `BLOCKSCOUT_API_KEY` from env and passes them only as request headers to
+  the real client classes — it never prints them, and every printed
+  "REQUEST" line was checked to confirm neither provider's key goes in a
+  query string for either of these two providers (Blockscout does support
+  a query-string key form in some configurations; this script and the
+  underlying `BlockscoutClient` never use it, only the `Authorization`
+  header).
+- **Dependency audit re-run:** same result as Phase 0–3 — zero
+  vulnerabilities in production dependencies (`fastify`,
+  `@fastify/rate-limit`, `zod`, `@hoodflow/*`); the 6 pre-existing
+  advisories are still confined to dev-only test tooling
+  (`vitest`/`vite`/`@vitest/mocker`) and unchanged by this phase's work.
 
 ## Threat model boundaries honored by design
 

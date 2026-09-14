@@ -27,6 +27,8 @@ export const SignalType = {
   // Holders
   HOLDER_CONCENTRATION: "HOLDER_CONCENTRATION",
   TOP10_CONCENTRATION: "TOP10_CONCENTRATION",
+  TOP20_CONCENTRATION: "TOP20_CONCENTRATION",
+  HOLDER_GROWTH: "HOLDER_GROWTH",
 
   // Market/flow
   BUY_SELL_IMBALANCE: "BUY_SELL_IMBALANCE",
@@ -125,6 +127,8 @@ export interface DataQuality {
 export interface HoodflowReport {
   token: import("./domain.js").TokenIdentity;
   generatedAt: string;
+  /** OBSERVATION_TIME vs FETCH_TIME/SERVE_TIME — see packages/core/src/freshness.ts. */
+  dataFreshness: import("../freshness.js").DataFreshnessInfo;
   score: {
     /** Data-completeness / confidence composite, NOT a buy/sell score. 0-100. */
     dataQualityScore: number;

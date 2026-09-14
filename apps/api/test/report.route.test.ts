@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { DataState, type ProviderResult, type ContractSecurityData, type LiquiditySnapshot, type HolderSummary } from "@hoodflow/core";
+import {
+  DataState,
+  InMemoryHistoryStore,
+  type ProviderResult,
+  type ContractSecurityData,
+  type LiquiditySnapshot,
+  type HolderSummary,
+} from "@hoodflow/core";
 import type { BlockscoutClient, DexScreenerClient, GoPlusClient } from "@hoodflow/providers";
 import { buildApp } from "../src/app.js";
 import { loadConfig } from "../src/config.js";
@@ -70,7 +77,20 @@ describe("GET /v1/report/:chainId/:address", () => {
     await app.close();
   });
 
-  it("gates DexScreener liquidity behind a verified chain slug — chain 4663's slug is unverified, so liquidity is DATA_UNAVAILABLE by design even if the provider mock would return data", async () => {
+  it("calls DexScreener for chain 4663 now that its slug is verified (Phase 4 — see docs/LIVE_VERIFICATION.md)", async () => {
+    const app = await buildApp(
+      config,
+      makeDeps({
+        liquidity: fakeResult(DataState.AVAILABLE, { liquidityUsd: 200_000, marketCapUsd: 220_000, buys24h: 340, sells24h: 110 }),
+      }),
+    );
+    const res = await app.inject({ method: "GET", url: `/v1/report/4663/${ADDRESS}` });
+    const body = res.json();
+    expect(body.dataQuality.liquidity).toBe("AVAILABLE");
+    await app.close();
+  });
+
+  it("still gates DexScreener liquidity behind a verified chain slug for chains where the slug is unverified (e.g. testnet 46630)", async () => {
     const app = await buildApp(
       config,
       makeDeps({
@@ -79,7 +99,7 @@ describe("GET /v1/report/:chainId/:address", () => {
         liquidity: fakeResult(DataState.AVAILABLE, { liquidityUsd: 200_000, marketCapUsd: 220_000 }),
       }),
     );
-    const res = await app.inject({ method: "GET", url: `/v1/report/4663/${ADDRESS}` });
+    const res = await app.inject({ method: "GET", url: `/v1/report/46630/${ADDRESS}` });
     const body = res.json();
     expect(body.dataQuality.liquidity).toBe("DATA_UNAVAILABLE");
     await app.close();
@@ -89,6 +109,61 @@ describe("GET /v1/report/:chainId/:address", () => {
     const app = await buildApp(config, makeDeps({}));
     const res = await app.inject({ method: "GET", url: "/healthz" });
     expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it("never presents a partial-data report as complete: strong liquidity + missing contract/holders still shows limitations and a non-null confidence penalty", async () => {
+    const app = await buildApp(
+      config,
+      makeDeps({
+        liquidity: fakeResult(DataState.AVAILABLE, { liquidityUsd: 500_000, marketCapUsd: 520_000, buys24h: 400, sells24h: 100 }),
+        contract: fakeResult(DataState.PROVIDER_UNAVAILABLE),
+        holders: fakeResult(DataState.PROVIDER_UNAVAILABLE),
+      }),
+    );
+    const res = await app.inject({ method: "GET", url: `/v1/report/4663/${ADDRESS}` });
+    const body = res.json();
+    expect(body.dataQuality.contract).toBe("PROVIDER_UNAVAILABLE");
+    expect(body.dataQuality.holders).toBe("PROVIDER_UNAVAILABLE");
+    expect(body.dataQuality.overallConfidencePenalty).not.toBeNull();
+    expect(body.limitations.length).toBeGreaterThan(0);
+    // The market state must not become an artificially confident, fully-informed-looking state
+    // just because one of three domains had strong data.
+    expect(body.score.dataQualityScore).toBeLessThan(100);
+  });
+
+  it("propagates RATE_LIMITED from a provider through to the report's dataQuality rather than masking it as DATA_UNAVAILABLE", async () => {
+    const app = await buildApp(config, makeDeps({ contract: fakeResult(DataState.RATE_LIMITED) }));
+    const res = await app.inject({ method: "GET", url: `/v1/report/4663/${ADDRESS}` });
+    const body = res.json();
+    expect(body.dataQuality.contract).toBe("RATE_LIMITED");
+  });
+
+  it("HOLDER_GROWTH appears on a second scan of the same token (via a shared HistoryStore) but not on the first", async () => {
+    let holderCount = 1000;
+    const deps = {
+      goplus: { getTokenSecurity: async () => fakeResult(DataState.DATA_UNAVAILABLE) } as unknown as GoPlusClient,
+      dexscreener: { getTokenLiquidity: async () => fakeResult(DataState.DATA_UNAVAILABLE) } as unknown as DexScreenerClient,
+      blockscout: {
+        getHolderSummary: async () => fakeResult(DataState.AVAILABLE, { holderCount, top10Pct: 30 }),
+      } as unknown as BlockscoutClient,
+    };
+    const historyStore = new InMemoryHistoryStore();
+    const app = await buildApp(config, deps, historyStore);
+
+    const first = await app.inject({ method: "GET", url: `/v1/report/4663/${ADDRESS}` });
+    const firstBody = first.json();
+    expect(firstBody.signals.some((s: { signalType: string }) => s.signalType === "HOLDER_GROWTH")).toBe(false);
+    expect(firstBody.limitations.join(" ")).toMatch(/no prior snapshot/i);
+
+    holderCount = 1300; // +30% — should trigger a HIGH-strength HOLDER_GROWTH signal
+    const second = await app.inject({ method: "GET", url: `/v1/report/4663/${ADDRESS}` });
+    const secondBody = second.json();
+    const growth = secondBody.signals.find((s: { signalType: string }) => s.signalType === "HOLDER_GROWTH");
+    expect(growth).toBeDefined();
+    expect(growth.direction).toBe("POSITIVE");
+    expect(growth.strength).toBe("HIGH");
+
     await app.close();
   });
 });

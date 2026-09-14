@@ -11,10 +11,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "pnpm -r run typecheck",
-    "dev:api": "pnpm --filter @hoodflow/api run dev"
+    "dev:api": "pnpm --filter @hoodflow/api run dev",
+    "verify:live": "tsx scripts/verify-live-providers.ts"
   },
   "devDependencies": {
+    "@hoodflow/core": "workspace:*",
+    "@hoodflow/providers": "workspace:*",
     "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^3.2.7"
   },

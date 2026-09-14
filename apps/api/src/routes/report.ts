@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { buildReport } from "@hoodflow/core";
+import { buildReport, type HistoryStore } from "@hoodflow/core";
 import { getChainConfig, isValidEvmAddress } from "@hoodflow/providers";
 import { fetchSnapshot, type PipelineDeps } from "../pipeline.js";
 
@@ -9,7 +9,7 @@ const ParamsSchema = z.object({
   address: z.string(),
 });
 
-export function registerReportRoute(app: FastifyInstance, deps: PipelineDeps): void {
+export function registerReportRoute(app: FastifyInstance, deps: PipelineDeps, historyStore: HistoryStore): void {
   app.get("/v1/report/:chainId/:address", async (request, reply) => {
     const parsedParams = ParamsSchema.safeParse(request.params);
     if (!parsedParams.success) {
@@ -32,7 +32,16 @@ export function registerReportRoute(app: FastifyInstance, deps: PipelineDeps): v
     request.log.info({ chainId, addressPrefix: address.slice(0, 10) }, "building report");
 
     const snapshot = await fetchSnapshot(deps, chainId, address);
-    const report = buildReport(snapshot);
+
+    // Historical comparison: look up the most recent prior scan for this exact token
+    // (see docs/HISTORY_SCHEMA.md). Never fabricated — if there isn't one, buildReport
+    // is told nothing to compare against and HOLDER_GROWTH simply doesn't appear.
+    const previous = await historyStore.getPreviousSnapshot(snapshot.token, snapshot.capturedAt);
+    const previousHolderCount = previous?.snapshot.holders.data?.holderCount;
+
+    const report = buildReport(snapshot, { previousHolderCount });
+    await historyStore.recordScan({ snapshot, report });
+
     return reply.status(200).send(report);
   });
 }

@@ -43,14 +43,21 @@ export class GoPlusClient {
       });
       const latencyMs = Date.now() - start;
 
+      if (status === 403) {
+        // Observed live 2026-09-14 from this codebase's sandboxed verification run: an
+        // upstream network policy blocked the request before it reached GoPlus at all (see
+        // docs/LIVE_VERIFICATION.md). A 403 at the transport layer is access-blocked, not
+        // "GoPlus rejected this specific address" — treat it as retry-worthy, same as Blockscout.
+        return unavailable(PROVIDER, DataState.PROVIDER_UNAVAILABLE, "GoPlus returned HTTP 403 (blocked, not a data rejection).", status);
+      }
       if (status === 429) {
-        return unavailable(PROVIDER, DataState.RATE_LIMITED, "GoPlus rate limit exceeded.");
+        return unavailable(PROVIDER, DataState.RATE_LIMITED, "GoPlus rate limit exceeded.", status);
       }
       if (status >= 500) {
-        return unavailable(PROVIDER, DataState.PROVIDER_UNAVAILABLE, `GoPlus returned HTTP ${status}.`);
+        return unavailable(PROVIDER, DataState.PROVIDER_UNAVAILABLE, `GoPlus returned HTTP ${status}.`, status);
       }
       if (status >= 400) {
-        return unavailable(PROVIDER, DataState.ERROR, `GoPlus returned HTTP ${status}.`);
+        return unavailable(PROVIDER, DataState.ERROR, `GoPlus returned HTTP ${status}.`, status);
       }
 
       const parsed = GoPlusResponseSchema.safeParse(json);
@@ -59,19 +66,25 @@ export class GoPlusClient {
           PROVIDER,
           DataState.ERROR,
           `GoPlus response failed schema validation: ${parsed.error.issues[0]?.message ?? "unknown"}`,
+          status,
         );
       }
       if (parsed.data.code !== 1) {
-        return unavailable(PROVIDER, DataState.ERROR, `GoPlus returned code ${parsed.data.code}: ${parsed.data.message ?? ""}`.trim());
+        return unavailable(
+          PROVIDER,
+          DataState.ERROR,
+          `GoPlus returned code ${parsed.data.code}: ${parsed.data.message ?? ""}`.trim(),
+          status,
+        );
       }
 
       const result = parsed.data.result?.[normalized];
       if (!result || Object.keys(result).length === 0) {
-        return unavailable(PROVIDER, DataState.DATA_UNAVAILABLE, "GoPlus has no security data for this token/chain.");
+        return unavailable(PROVIDER, DataState.DATA_UNAVAILABLE, "GoPlus has no security data for this token/chain.", status);
       }
 
       const domain = normalizeGoPlus(result);
-      return available(PROVIDER, domain, latencyMs);
+      return available(PROVIDER, domain, latencyMs, status);
     } catch (err) {
       if (err instanceof ProviderTimeoutError) {
         return unavailable(PROVIDER, DataState.PROVIDER_UNAVAILABLE, err.message);

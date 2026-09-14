@@ -19,6 +19,17 @@ describe("GoPlusClient", () => {
     expect(result.data?.buyTaxPct).toBeCloseTo(3);
     expect(result.data?.holderCount).toBe(842);
     expect(result.data?.top10HolderPct).toBeCloseTo(34); // (0.18+0.09+0.07)*100
+    expect(result.httpStatus).toBe(200);
+  });
+
+  it("treats an empty-string buy_tax/sell_tax as 0%, matching a real live GoPlus response for chain 4663 (see docs/LIVE_VERIFICATION.md)", async () => {
+    const fixture = loadFixture("goplus-valid.json");
+    fixture.result[ADDRESS].buy_tax = "";
+    fixture.result[ADDRESS].sell_tax = "";
+    const client = new GoPlusClient({ fetchImpl: mockFetchOnce(200, fixture) });
+    const result = await client.getTokenSecurity(4663, ADDRESS);
+    expect(result.data?.buyTaxPct).toBe(0);
+    expect(result.data?.sellTaxPct).toBe(0);
   });
 
   it("returns DATA_UNAVAILABLE when GoPlus has no data for the chain/address", async () => {
@@ -32,6 +43,13 @@ describe("GoPlusClient", () => {
     const client = new GoPlusClient({ fetchImpl: mockFetchOnce(200, {}) });
     const result = await client.getTokenSecurity(4663, "not-an-address");
     expect(result.state).toBe(DataState.INVALID_INPUT);
+  });
+
+  it("returns PROVIDER_UNAVAILABLE (not ERROR) on HTTP 403 — Phase 4 finding, see docs/LIVE_VERIFICATION.md: a live run against this exact client hit a transport-level 403 that was originally misclassified as ERROR", async () => {
+    const client = new GoPlusClient({ fetchImpl: mockFetchOnce(403, {}) });
+    const result = await client.getTokenSecurity(4663, ADDRESS);
+    expect(result.state).toBe(DataState.PROVIDER_UNAVAILABLE);
+    expect(result.httpStatus).toBe(403);
   });
 
   it("returns RATE_LIMITED on HTTP 429", async () => {

@@ -31,13 +31,22 @@ export interface ProviderResult<T> {
   /** Human-readable, non-sensitive explanation. Never a stack trace or secret. */
   error?: string;
   provider: string;
+  /**
+   * When HOODFLOW made this call (FETCH_TIME). For every provider in this
+   * build, the underlying fact was true at essentially this same instant
+   * (these are live pull APIs, nothing is served from a cache yet) — see
+   * `packages/core/src/freshness.ts` for where FETCH_TIME and
+   * OBSERVATION_TIME are allowed to diverge once caching/history exists.
+   */
   fetchedAt: string; // ISO timestamp
   /** Milliseconds the provider call took, when it completed. */
   latencyMs?: number;
+  /** Raw HTTP status code, when a response was actually received (absent on network-level failures/timeouts). */
+  httpStatus?: number;
 }
 
-export function available<T>(provider: string, data: T, latencyMs?: number): ProviderResult<T> {
-  return { state: DataState.AVAILABLE, data, provider, fetchedAt: new Date().toISOString(), latencyMs };
+export function available<T>(provider: string, data: T, latencyMs?: number, httpStatus?: number): ProviderResult<T> {
+  return { state: DataState.AVAILABLE, data, provider, fetchedAt: new Date().toISOString(), latencyMs, httpStatus };
 }
 
 export function partial<T>(
@@ -45,14 +54,16 @@ export function partial<T>(
   data: T,
   error: string,
   latencyMs?: number,
+  httpStatus?: number,
 ): ProviderResult<T> {
-  return { state: DataState.PARTIAL, data, error, provider, fetchedAt: new Date().toISOString(), latencyMs };
+  return { state: DataState.PARTIAL, data, error, provider, fetchedAt: new Date().toISOString(), latencyMs, httpStatus };
 }
 
 export function unavailable<T>(
   provider: string,
   state: Exclude<DataState, "AVAILABLE" | "PARTIAL">,
   error: string,
+  httpStatus?: number,
 ): ProviderResult<T> {
-  return { state, error, provider, fetchedAt: new Date().toISOString() };
+  return { state, error, provider, fetchedAt: new Date().toISOString(), httpStatus };
 }

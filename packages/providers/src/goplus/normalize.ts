@@ -6,8 +6,18 @@ function bool(v: string | undefined): boolean | undefined {
   return v === "1";
 }
 
+/**
+ * GoPlus sends buy_tax/sell_tax as an EMPTY STRING (not "0", not absent)
+ * for tokens where no tax logic was detected — confirmed against a live
+ * response for Robinhood Chain's USDG token (2026-09-14, see
+ * docs/LIVE_VERIFICATION.md). `Number("")` is `0` in JS, so this already
+ * resolves to 0%, which is the correct reading — but treat that as
+ * intentional, not an accident of `Number()` coercion, since a genuinely
+ * absent field (`undefined`) must stay `undefined`, not become 0.
+ */
 function pctFraction(v: string | undefined): number | undefined {
   if (v === undefined) return undefined;
+  if (v === "") return 0;
   const n = Number(v);
   if (Number.isNaN(n)) return undefined;
   return n * 100;

@@ -46,6 +46,13 @@ describe("BlockscoutClient", () => {
     expect(result.state).toBe(DataState.DATA_UNAVAILABLE);
   });
 
+  it("returns PROVIDER_UNAVAILABLE (not DATA_UNAVAILABLE) on HTTP 403 — a block is not confirmation the token doesn't exist", async () => {
+    const client = new BlockscoutClient({ baseUrl: BASE_URL, fetchImpl: mockFetchOnce(403, {}) });
+    const result = await client.getHolderSummary(ADDRESS);
+    expect(result.state).toBe(DataState.PROVIDER_UNAVAILABLE);
+    expect(result.httpStatus).toBe(403);
+  });
+
   it("returns INVALID_INPUT for a malformed address", async () => {
     const client = new BlockscoutClient({ baseUrl: BASE_URL, fetchImpl: mockFetchOnce(200, {}) });
     const result = await client.getHolderSummary("nope");
