@@ -1,0 +1,68 @@
+import type { HoodflowReport } from "@hoodflow/core";
+import styles from "./ui.module.css";
+import { DataUnavailable } from "./DataUnavailable";
+import { presentDelta } from "../lib/present-history";
+import { formatTimestamp } from "../lib/format";
+
+/**
+ * IA layer 6 — "What Changed." The single most product-critical component
+ * per the spec: a highly visible, first-class rendering of the backend's
+ * real per-scan `history.comparisons` (MetricDelta[]) — see
+ * packages/core/src/historical/delta-engine.ts. Every value here already
+ * existed in the report; this component only formats and arranges it
+ * (lib/present-history.ts's presentDelta), never computes it.
+ */
+
+const DIRECTION_ARROW: Record<string, string> = { up: "▲", down: "▼", flat: "→", unavailable: "?" };
+const DIRECTION_CLASS: Record<string, string> = {
+  up: "deltaUp",
+  down: "deltaDown",
+  flat: "deltaFlat",
+  unavailable: "deltaUnavailable",
+};
+
+export function WhatChanged({ report }: { report: HoodflowReport }) {
+  const { history } = report;
+
+  if (history.status === "INSUFFICIENT_HISTORY") {
+    return (
+      <section className={styles.card} aria-labelledby="what-changed-heading">
+        <div className={styles.cardHeader}>
+          <h2 id="what-changed-heading" className={styles.cardTitle}>
+            What Changed
+          </h2>
+        </div>
+        <DataUnavailable reason="This is the first recorded scan of this exact token — there is no prior observation to compare against yet. This is unmeasured, not unchanged, and not a negative finding." />
+      </section>
+    );
+  }
+
+  return (
+    <section className={styles.card} aria-labelledby="what-changed-heading">
+      <div className={styles.cardHeader}>
+        <h2 id="what-changed-heading" className={styles.cardTitle}>
+          What Changed
+        </h2>
+      </div>
+
+      <p className={styles.muted} style={{ marginBottom: 12 }}>
+        Comparing this scan ({formatTimestamp(history.currentObservedAt)}) against the previous scan
+        {history.previousObservedAt ? ` (${formatTimestamp(history.previousObservedAt)})` : ""}.
+      </p>
+
+      {history.comparisons.map((delta) => {
+        const p = presentDelta(delta);
+        const directionClassKey = DIRECTION_CLASS[p.direction] ?? "deltaUnavailable";
+        return (
+          <div className={styles.row} key={delta.metric}>
+            <span className={styles.label}>{p.label}</span>
+            <span className={`${styles.value} ${styles[directionClassKey] ?? ""}`} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span aria-hidden="true">{DIRECTION_ARROW[p.direction]}</span>
+              {p.changeText ?? p.unavailableReason}
+            </span>
+          </div>
+        );
+      })}
+    </section>
+  );
+}

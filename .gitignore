@@ -6,3 +6,9 @@ dist/
 !.env.example
 coverage/
 .DS_Store
+
+# Next.js (apps/web)
+.next/
+out/
+apps/web/next-env.d.ts
+*.tsbuildinfo

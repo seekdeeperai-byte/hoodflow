@@ -44,6 +44,13 @@ accordingly.
       `HoodflowReport.history`. Reused the existing Phase 4 `HistoryStore`
       unchanged; proved by test that score/marketState are unaffected by
       history's presence or absence. See docs/HISTORICAL_INTELLIGENCE.md.
+- [x] Phase 8 — Frontend ("What HOODFLOW Sees"): `apps/web` (Next.js 15 +
+      React 19), a presentation-only layer over the unmodified
+      `HoodflowReport` — zero changes to `packages/core`,
+      `packages/providers`, or `apps/api`. All 9 information-architecture
+      layers from the product spec, a DEMO/LIVE-labeled sample report, and
+      real DATA_UNAVAILABLE/first-scan handling throughout. See
+      docs/FRONTEND.md.
 
 ## Next up
 
@@ -70,18 +77,19 @@ accordingly.
    but it needs a real minimum-sample-size policy first so a genuine
    acceleration (100k → 120k → 180k) isn't confused with noise
    (100k → 101k).
-4. **Phase 8 — Frontend ("What HOODFLOW Sees").** Not started. Needs a
-   decision on framework (Next.js is the default per the spec) and,
-   separately, a decision on where this deploys. The `identity` block
-   (Phase 5) and the `history` block (Phase 6) in `HoodflowReport` are what
-   this frontend would surface first — "what token am I looking at" and
-   "what changed" — before showing any risk/market content.
-5. **Phase 9/10 — Hardening + deployment.** Dockerfile, CI, secrets
+4. **Phase 9/10 — Hardening + deployment.** Dockerfile, CI, secrets
    management, a Postgres-backed `HistoryStore` (docs/HISTORY_SCHEMA.md),
    and the deployment target itself are all blocked on a product-owner
    decision (see milestone reports) — and, separately, on getting this
    codebase pushed to a durable remote at all (still sandbox-only as of
-   Phase 6 — see docs/HISTORICAL_INTELLIGENCE.md's parent report).
+   Phase 8 — see docs/HISTORICAL_INTELLIGENCE.md's parent report). A
+   deployment target decision also now needs to cover `apps/web` (e.g. does
+   it deploy alongside `apps/api`, or separately with
+   `HOODFLOW_API_BASE_URL` pointed at a deployed API) — see docs/FRONTEND.md.
+
+Phase 8 — Frontend ("What HOODFLOW Sees") moved to "Done" above; the
+`identity` (Phase 5) and `history` (Phase 6) blocks in `HoodflowReport` are
+what it surfaces first, exactly as anticipated here.
 
 ## Explicitly deferred (typed but not built)
 

@@ -1,0 +1,127 @@
+/* HoodFlow — design tokens.
+   Bloomberg-terminal x modern fintech SaaS: near-black surfaces, restrained
+   accents, green/red used only for real positive/negative signal direction,
+   generous spacing, compact-but-readable data density. System font stacks
+   only — no external font loading (no network dependency, no extra weight).
+*/
+
+:root {
+  --bg: #0a0b0d;
+  --surface: #121317;
+  --surface-2: #17181d;
+  --surface-3: #1d1f26;
+  --border: #24262e;
+  --border-strong: #34363f;
+  --text: #e9eaee;
+  --text-dim: #9a9ca8;
+  --text-faint: #64666f;
+  --accent: #5b8cff;
+  --accent-dim: #34406b;
+  --positive: #34c77b;
+  --positive-dim: #17301f;
+  --negative: #ef5a5f;
+  --negative-dim: #351b1c;
+  --neutral: #b98a3d;
+  --neutral-dim: #2f2513;
+  --unavailable: #6b6d78;
+  --font-sans: -apple-system, "Segoe UI", ui-sans-serif, system-ui, Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Consolas", monospace;
+  --radius: 8px;
+  --radius-sm: 5px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+@media (prefers-color-scheme: light) {
+  /* HoodFlow is dark-first by design (terminal aesthetic). We still respect a
+     light preference by lightening surfaces rather than flattening the app to
+     a generic light theme that would undercut the "intelligence terminal"
+     feel the product principle calls for. */
+  :root {
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --surface-2: #f7f8fa;
+    --surface-3: #eef0f3;
+    --border: #dfe1e6;
+    --border-strong: #c7cad1;
+    --text: #14151a;
+    --text-dim: #55575f;
+    --text-faint: #8a8c94;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover,
+a:focus-visible {
+  text-decoration: underline;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate-in {
+    animation: fade-in 220ms ease-out;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+button {
+  font-family: inherit;
+}

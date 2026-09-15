@@ -1,0 +1,135 @@
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.cardTitle {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.section {
+  margin-bottom: 20px;
+}
+
+.grid {
+  display: grid;
+  gap: 16px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.badgePositive {
+  color: var(--positive);
+  background: var(--positive-dim);
+  border-color: color-mix(in srgb, var(--positive) 35%, var(--border-strong));
+}
+.badgeNegative {
+  color: var(--negative);
+  background: var(--negative-dim);
+  border-color: color-mix(in srgb, var(--negative) 35%, var(--border-strong));
+}
+.badgeNeutral {
+  color: var(--neutral);
+  background: var(--neutral-dim);
+  border-color: color-mix(in srgb, var(--neutral) 35%, var(--border-strong));
+}
+.badgeAccent {
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border-strong));
+}
+.badgeUnavailable {
+  color: var(--unavailable);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.label {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.deltaUp {
+  color: var(--positive);
+}
+.deltaDown {
+  color: var(--negative);
+}
+.deltaFlat {
+  color: var(--text-dim);
+}
+.deltaUnavailable {
+  color: var(--unavailable);
+  font-style: italic;
+}
+
+.evidenceList {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.evidenceList li {
+  margin-bottom: 4px;
+}
+
+.muted {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.unavailablePanel {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  color: var(--text-dim);
+  font-size: 13px;
+  background: var(--surface-2);
+}
