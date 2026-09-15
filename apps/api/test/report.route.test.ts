@@ -30,6 +30,9 @@ function makeDeps(overrides: {
     blockscout: {
       getHolderSummary: async () => overrides.holders ?? fakeResult(DataState.DATA_UNAVAILABLE),
     } as unknown as BlockscoutClient,
+    // Every existing test in this file exercises chain 4663 — matches the real
+    // server.ts wiring (Phase 11 fix, see pipeline.ts's PipelineDeps doc comment).
+    blockscoutChainId: 4663,
   };
 }
 
@@ -102,6 +105,26 @@ describe("GET /v1/report/:chainId/:address", () => {
     const res = await app.inject({ method: "GET", url: `/v1/report/46630/${ADDRESS}` });
     const body = res.json();
     expect(body.dataQuality.liquidity).toBe("DATA_UNAVAILABLE");
+    await app.close();
+  });
+
+  it("Phase 11 fix: never calls Blockscout for a chain other than the one it's configured for (prevents cross-chain holder-data misattribution, e.g. testnet 46630 vs. mainnet 4663)", async () => {
+    const app = await buildApp(
+      config,
+      makeDeps({
+        // This mock would satisfy the request if Blockscout were ever called for chain
+        // 46630 — proving fetchSnapshot itself never invokes it for a chain other than
+        // the one blockscoutChainId names, not just that this particular mock happens
+        // to return nothing. Chain 46630 is deliberately used because it IS registered
+        // in chains.ts (unlike the already-covered 404 case for an unregistered chain),
+        // so before this fix it would have reached the real Blockscout call.
+        holders: fakeResult(DataState.AVAILABLE, { holderCount: 999_999, top10Pct: 10 }),
+      }),
+    );
+    const res = await app.inject({ method: "GET", url: `/v1/report/46630/${ADDRESS}` });
+    const body = res.json();
+    expect(body.dataQuality.holders).toBe("DATA_UNAVAILABLE");
+    expect(body.limitations.join(" ")).toMatch(/holder distribution data unavailable/i);
     await app.close();
   });
 
@@ -219,6 +242,7 @@ describe("GET /v1/report/:chainId/:address", () => {
       blockscout: {
         getHolderSummary: async () => fakeResult(DataState.AVAILABLE, { holderCount, top10Pct: 30 }),
       } as unknown as BlockscoutClient,
+      blockscoutChainId: 4663,
     };
     const historyStore = new InMemoryHistoryStore();
     const app = await buildApp(config, deps, historyStore);
@@ -251,6 +275,7 @@ describe("GET /v1/report/:chainId/:address", () => {
       blockscout: {
         getHolderSummary: async () => fakeResult(DataState.AVAILABLE, { holderCount, top10Pct }),
       } as unknown as BlockscoutClient,
+      blockscoutChainId: 4663,
     };
     const historyStore = new InMemoryHistoryStore();
     const app = await buildApp(config, deps, historyStore);
@@ -300,6 +325,7 @@ describe("GET /v1/report/:chainId/:address", () => {
         getTokenLiquidity: async () => (liquidityState === DataState.AVAILABLE ? fakeResult(DataState.AVAILABLE, { liquidityUsd: 100_000 }) : fakeResult(DataState.PROVIDER_UNAVAILABLE)),
       } as unknown as DexScreenerClient,
       blockscout: { getHolderSummary: async () => fakeResult(DataState.DATA_UNAVAILABLE) } as unknown as BlockscoutClient,
+      blockscoutChainId: 4663,
     };
     const historyStore = new InMemoryHistoryStore();
     const app = await buildApp(config, deps, historyStore);

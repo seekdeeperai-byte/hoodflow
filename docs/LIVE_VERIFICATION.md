@@ -345,3 +345,105 @@ assumed carried over from Phase 9. Phase 10's core success criteria 1 and
 2 (the repo's own GoPlus/DexScreener clients successfully reaching their
 providers) were not met in this environment. This is reported as a
 genuine finding, not worked around.
+
+## Phase 11 (2026-09-15) — durable-remote attempt, deployment readiness, and a real bug found in the process
+
+Phase 11's brief was to move the repository to a durable GitHub remote and
+get an authoritative real-network verification from wherever that landed.
+Neither half of that premise held in this environment, re-tested with more
+rigor than Phase 10 (direct `curl -v` per host, correlated line-by-line
+against the proxy's own failure log, plus `git credential fill` rather than
+just inspecting config):
+
+- **Provider network: identical result, more rigorously confirmed.**
+  `scripts/verify-live-providers.ts` (real client classes, no mocks) was
+  re-run: GoPlus/DexScreener/Blockscout all HTTP 403,
+  `PROVIDER_UNAVAILABLE`. This time each host was independently confirmed
+  with `curl -v` showing the literal proxy exchange (`CONNECT
+  api.gopluslabs.io:443` → `HTTP/1.1 403 Forbidden` from the *proxy*, not
+  from GoPlus) and the proxy's `/__agentproxy/status` endpoint recording a
+  `connect_rejected` entry for that exact host within seconds of the
+  request. Repeated for all three hosts. This is the clearest evidence yet
+  that this is a policy-level block at this sandbox's egress gateway, not
+  a provider-side response of any kind — same category since Phase 0.
+- **GitHub: reachable, still not authenticated, confirmed more directly
+  this time.** `curl` to `github.com`/`api.github.com` succeeds (HTTP
+  400/200 — real HTTP responses, not proxy rejections). `git credential
+  fill` for `host=github.com` was run directly (not just inspecting
+  config) and failed with `"could not read Username for
+  'https://github.com': terminal prompts disabled"` — a definitive,
+  first-hand confirmation that no credential helper is wired up here, not
+  an inference from absent config. `GITHUB_TOKEN`/`GH_TOKEN` env vars are
+  present but are not connected to git's credential resolution by any
+  configured mechanism (`GIT_CONFIG_KEY_0/1/2` only rewrite
+  `ssh://git@github.com/` → `https://github.com/`, an unrelated URL
+  rewrite, not authentication). Per this phase's explicit rule against
+  inventing credential mechanisms, these env vars were not wired in
+  manually. `origin` remains unconfigured; nothing was pushed.
+- **A real, previously-undetected bug found during the deployment
+  readiness audit, not during provider testing.** `apps/api/src/server.ts`
+  constructs a single `BlockscoutClient` scoped to chain 4663's explorer,
+  but `apps/api/src/pipeline.ts`'s `fetchSnapshot` called it unconditionally
+  for *any* registered chain — including testnet 46630, which has its own,
+  different `blockscoutBaseUrl` in the chain registry and therefore passes
+  the route's chain-existence check. A request for
+  `/v1/report/46630/:address` would have queried the *mainnet* explorer
+  and could have returned real mainnet holder data, misattributed to a
+  testnet-chain report. This is a genuine cross-chain data-integrity bug —
+  exactly the failure mode this project's data-integrity rules exist to
+  prevent — not a cosmetic gap, and the existing test suite never caught it
+  because no test exercised chain 46630 against a Blockscout mock that
+  would return `AVAILABLE` data. Fixed this phase (see
+  docs/DATA_CONTRACT_AUDIT.md's Phase 11 addendum for the full fix and
+  regression test), and verified against the real production build: chain
+  4663 still attempts the real Blockscout call (correctly
+  `PROVIDER_UNAVAILABLE` in this sandbox), while chain 46630 now correctly
+  never calls it at all (`DATA_UNAVAILABLE`, explicit message) — confirmed
+  live against the built `apps/api/dist/server.js`, not just in tests.
+- **A real production-dependency security finding, also found during the
+  readiness audit rather than provider testing.** `pnpm audit --prod`
+  surfaced 2 HIGH + 2 moderate advisories, all on `postcss@8.4.31`, pulled
+  in transitively through `apps/web`'s `next@15.5.25` production
+  dependency (arbitrary file/sourcemap disclosure via CSS
+  `sourceMappingURL` handling). Fixed with a `pnpm.overrides` pin to
+  `postcss@^8.5.28` in the root `package.json` — re-verified: `pnpm audit
+  --prod` now reports zero known vulnerabilities, and the full test/
+  typecheck/build gate re-ran clean afterward with identical build output.
+  See docs/SECURITY.md's Phase 11 recheck.
+- **Real end-to-end pipeline re-proof, same token, against the actual
+  production build this time** (`node dist/server.js`, not `tsx watch`):
+  scan 1 → `INSUFFICIENT_HISTORY`; scan 2 → `COMPARABLE`,
+  `observationsUsed: 2`, every `MetricDelta` correctly `UNAVAILABLE`,
+  `marketState`/`dataQualityScore` unchanged across both scans. Also
+  confirmed live against the production build: `dataQuality.holders ==
+  "PROVIDER_UNAVAILABLE"` for chain 4663 (real attempted call, sandbox-
+  blocked) vs. `"DATA_UNAVAILABLE"` for chain 46630 (never attempted, per
+  the fix above) — the clearest possible demonstration that the fix
+  actually changes production behavior, not just test behavior.
+- **Deployment readiness, checked for the first time this phase (not
+  previously audited): no blockers found.** Both `apps/api` (`node
+  dist/server.js`) and `apps/web` (`next start`, with
+  `HOODFLOW_API_BASE_URL` pointed at the API) start cleanly from their
+  production builds and serve real requests, including the `/api/*`
+  rewrite path. `apps/web` had no `.env.example` despite `apps/api` having
+  one and the variable it needs (`HOODFLOW_API_BASE_URL`) being genuinely
+  optional but real — added this phase for parity, not a new feature.
+  Real risks (not blockers), unchanged from what was already known:
+  `HistoryStore` is in-memory-only (resets on restart, doesn't share state
+  across replicas) and `BlockscoutClient` is still single-chain by
+  construction (now safely gated instead of silently wrong, but still not
+  multi-chain-capable) — both already tracked in docs/ROADMAP.md, neither
+  addressed this phase since doing so would mean building new
+  infrastructure, explicitly out of scope.
+
+**Net effect on Phase 11:** the durable-remote and real-network-
+verification premise did not hold in this environment — reported plainly,
+not worked around, with more rigorous evidence than Phase 10. What Phase
+11 actually accomplished instead: a genuine, previously-undetected
+cross-chain data-integrity bug was found and fixed (with a regression
+test), a real production-dependency security vulnerability was found and
+fixed (with re-verification), a documentation gap in deployment
+reproducibility was closed, and the full pipeline was re-proven end-to-end
+against the actual production build rather than only the dev server. All
+195 tests pass (194 + 1 new regression test), typecheck clean, build
+clean.

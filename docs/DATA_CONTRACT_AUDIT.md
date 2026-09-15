@@ -157,6 +157,31 @@ this chain), 429 → `RATE_LIMITED`, 5xx → `PROVIDER_UNAVAILABLE`, other 4xx
 → `ERROR`. A schema-validation failure on either call also becomes
 `ERROR`, never a partially-trusted guess at the shape.
 
+**Chain gating (not a field, but part of this contract — Phase 11 fix):**
+unlike DexScreener (gated behind `dexScreenerSlugVerified` since Phase 4),
+`apps/api/src/pipeline.ts`'s `fetchSnapshot` had no equivalent gate for
+Blockscout before Phase 11, even though `BlockscoutClient` is a single
+instance scoped to one chain's explorer base URL
+(`apps/api/src/server.ts` constructs it for chain 4663 only). Chain 46630
+(testnet) is a *registered* chain (it has its own, different
+`blockscoutBaseUrl` in `chains.ts`), so a request for
+`/v1/report/46630/:address` passed the route's chain-existence check and
+reached `fetchSnapshot`, which called the chain-4663-scoped client
+regardless — meaning a real mainnet holder-data response for that address
+could have been returned and presented as if it belonged to the testnet
+chain's report. This is exactly the kind of cross-chain data
+misattribution this project's data-integrity rules exist to prevent, and
+it was a genuine bug, not a documented limitation, since nothing gated it
+and the existing test suite never exercised chain 46630 against a
+Blockscout mock returning `AVAILABLE` data. Fixed in Phase 11:
+`PipelineDeps` now carries an explicit `blockscoutChainId`, and
+`fetchSnapshot` only calls `blockscout.getHolderSummary()` when the
+request's `chainId` matches it — otherwise `holders` resolves to
+`DATA_UNAVAILABLE` with an explicit explanatory message, the same
+fail-closed pattern DexScreener already used. Regression test:
+`apps/api/test/report.route.test.ts`, "Phase 11 fix: never calls
+Blockscout for a chain other than the one it's configured for."
+
 ## Cross-cutting guarantees this audit confirms are actually in place
 
 - **No field, in any of the three normalizers, ever defaults a missing

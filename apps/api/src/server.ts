@@ -15,7 +15,7 @@ async function main() {
     apiKey: config.BLOCKSCOUT_API_KEY,
   });
 
-  const app = await buildApp(config, { goplus, dexscreener, blockscout });
+  const app = await buildApp(config, { goplus, dexscreener, blockscout, blockscoutChainId: 4663 });
 
   await app.listen({ port: config.PORT, host: config.HOST });
 }

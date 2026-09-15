@@ -232,22 +232,79 @@ docs/ROADMAP.md.
 
 ## Dependency audit
 
-`pnpm audit` (run 2026-09-14): **zero vulnerabilities in the production
-dependency tree** (fastify, @fastify/rate-limit, zod, and the
-@hoodflow/* workspace packages). Six vulnerabilities remain, all inside
-`vitest`/`vite`/`@vitest/mocker`/`esbuild` — dev-only test tooling that is
-never bundled into the deployed API and never exposed on a network in this
-project (we don't run `vitest --ui` or a vite dev server). One "critical"
-vitest UI-server advisory was present at the default installed version and
-has been fixed by pinning `vitest@^3.2.6`; the remaining six require a
-vitest 4.x major bump that isn't compatible with the currently resolvable
-vite version in this environment — tracked as a follow-up, not a blocker.
+`pnpm audit --prod` (last run 2026-09-15, Phase 11): **zero known
+vulnerabilities**, across both production dependency trees —
+`apps/api` (fastify, @fastify/rate-limit, zod, and the @hoodflow/*
+workspace packages) and `apps/web` (next, react, react-dom). This was not
+always true: this same command found 2 HIGH + 2 moderate advisories on
+`postcss` (transitively via `apps/web`'s `next` dependency) as of Phase 11,
+fixed via a `pnpm.overrides` pin — see the Phase 11 recheck above. The
+2026-09-14 note this replaced only checked `apps/api`'s tree, before
+`apps/web` (added in Phase 8) was part of the production dependency graph
+this audit needs to cover — corrected here, not just appended, since the
+old note's "zero vulnerabilities in the production dependency tree" claim
+was materially incomplete once `apps/web` existed.
+
+Dev-only tooling (`vitest`/`vite`/`@vitest/mocker`/`esbuild`) has its own,
+separate advisory history, not re-audited in Phase 11 since it's never
+bundled into either deployed app or exposed on a network in this project.
+
+## Phase 11 recheck (2026-09-15) — deployment readiness + security audit
+
+Re-audited as part of a durable-remote/deployment-readiness phase, not a
+feature phase. Two real findings, both fixed (see docs/LIVE_VERIFICATION.md's
+Phase 11 section for the full evidence trail):
+
+- **`pnpm audit --prod` found 2 HIGH + 2 moderate advisories** on
+  `postcss@8.4.31`, pulled in transitively through `apps/web`'s
+  `next@15.5.25` (a real production dependency, not dev-only) —
+  arbitrary file/sourcemap disclosure via CSS `sourceMappingURL` handling
+  (GHSA-6g55-p6wh-862q, GHSA-r28c-9q8g-f849, GHSA-qx2v-qp2m-jg93,
+  GHSA-fxqj-rqcc-2cmp). Fixed with a `pnpm.overrides` pin to
+  `postcss@^8.5.28` in the root `package.json` (the version already
+  resolved elsewhere in the tree via `vite`, so this isn't introducing an
+  unvetted new version). Re-verified: `pnpm audit --prod` now reports zero
+  known vulnerabilities; build output (bundle sizes, routes) identical
+  before/after; full test suite re-ran clean.
+- **A cross-chain data-integrity bug, found during the deployment
+  readiness audit rather than a security scan**, but reported here because
+  it's exactly the class of bug this document exists to catch:
+  `apps/api/src/pipeline.ts` called the single, chain-4663-scoped
+  `BlockscoutClient` unconditionally for any registered chain (including
+  testnet 46630), so a request for a different registered chain could have
+  returned real mainnet holder data misattributed to that chain's report.
+  Not an injection/auth vulnerability, but a genuine violation of this
+  project's core data-integrity guarantee (never present data from the
+  wrong source as if it answers the question asked). Fixed by gating the
+  Blockscout call behind an explicit `blockscoutChainId` on `PipelineDeps`,
+  mirroring the existing DexScreener slug-verification gate. Full detail:
+  docs/DATA_CONTRACT_AUDIT.md's Phase 11 addendum.
+- **Full security-relevant checklist re-run, all clean:** no hardcoded API
+  keys/bearer tokens/private keys in tracked source (`git grep` for
+  secret-shaped assignments, zero matches); no `.env` files tracked by git
+  or present on disk; no secret values logged (confirmed against
+  `apps/api/src/app.ts`'s centralized error handler, unchanged); no
+  `NEXT_PUBLIC_`-prefixed env vars anywhere in `apps/web`, and
+  `HOODFLOW_API_BASE_URL` is read only inside `next.config.mjs`
+  (server-side only — never reaches the browser bundle); no CORS
+  configured on the API and none needed, by design (see the corrected
+  note below); input validation confirmed unchanged (`chainId`/`address`
+  zod-parsed and EVM-address-validated before any URL is constructed,
+  closing the SSRF surface per `packages/providers/src/http.ts`'s own
+  documented note); no mock/fixture code reachable from `apps/api/src/server.ts`'s
+  production wiring (mocks exist only in `*/test/*.ts`).
 
 ## Known gaps (honest list, not yet addressed)
 
-- **No CORS policy configured.** Fine today (no browser frontend exists
-  yet); must be set explicitly, not left to Fastify defaults, before a
-  frontend origin is added.
+- **No CORS policy configured — and, as of Phase 8, this is by design,
+  not a gap.** *(Corrected in Phase 11: this note was written before
+  Phase 8's frontend existed and was never updated. `apps/web` never makes
+  a cross-origin request to `apps/api` — the browser talks to the Next.js
+  server on a same-origin relative path, which forwards the request
+  server-to-server via `next.config.mjs`'s `rewrites()`. See
+  docs/FRONTEND.md's "Data flow: API -> UI." This remains worth
+  revisiting only if a second, independently-hosted frontend origin is
+  ever added.)*
 - **No structured request-id propagation to provider calls** — Fastify
   assigns a `reqId` for its own logs, but it isn't threaded through into
   provider client calls for cross-service trace correlation. Small, but

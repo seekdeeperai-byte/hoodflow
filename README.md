@@ -11,19 +11,24 @@ explicit limitations. See `docs/` for the full picture; start with
 
 ## Status
 
-Through Phase 10: research, monorepo foundation, provider layer (GoPlus /
+Through Phase 11: research, monorepo foundation, provider layer (GoPlus /
 DexScreener / Blockscout), the core intelligence pipeline (analyzers →
 signals → relationships → evidence → interpretation → market state),
 identity resolution (Phase 5), historical intelligence + temporal
 relationships (Phase 6), a Next.js frontend (Phase 8, QA'd in a real
-browser in Phase 8.1), a live-data provider audit (Phase 9), and a
-production-network verification attempt (Phase 10) that re-confirmed this
-sandbox still cannot reach any provider via the repo's own client code
-(same policy-level egress block since Phase 0) and re-proved the full
-report pipeline end-to-end with zero fabricated data. No social/news/hype
-provider, no deployer/wallet intelligence, no RPC client, no persistence
-beyond in-memory history yet. See `docs/ROADMAP.md` for what's next and
-why.
+browser in Phase 8.1), a live-data provider audit (Phase 9), a
+production-network verification attempt (Phase 10), and a deployment
+readiness + security audit (Phase 11) that found and fixed a real
+cross-chain data-integrity bug (Blockscout holder data could have been
+misattributed to the wrong chain) and a real production-dependency
+security advisory (transitive `postcss`), and confirmed both production
+builds (`apps/api`, `apps/web`) start and serve correctly. This sandbox
+still cannot reach any provider via the repo's own client code (same
+policy-level egress block since Phase 0), and this repository still isn't
+on a durable remote (GitHub itself is reachable from here; no credential
+mechanism is configured). No social/news/hype provider, no deployer/wallet
+intelligence, no RPC client, no persistence beyond in-memory history yet.
+See `docs/ROADMAP.md` for what's next and why.
 
 ## Layout
 
@@ -40,8 +45,9 @@ docs/                  Architecture, data sources, scoring, security, roadmap
 ```bash
 pnpm install
 pnpm -r run build
-pnpm test              # 194 tests, all fixture-backed (see docs/ARCHITECTURE.md §2)
+pnpm test              # 195 tests, all fixture-backed (see docs/ARCHITECTURE.md §2)
 cp apps/api/.env.example apps/api/.env   # optional: GOPLUS_API_KEY / BLOCKSCOUT_API_KEY
+cp apps/web/.env.example apps/web/.env.local   # optional: HOODFLOW_API_BASE_URL (defaults to localhost:8787)
 pnpm --filter @hoodflow/api run start    # after build, or `run dev` for tsx watch mode
 curl http://localhost:8787/healthz
 curl http://localhost:8787/v1/report/4663/0xYOUR_TOKEN_ADDRESS

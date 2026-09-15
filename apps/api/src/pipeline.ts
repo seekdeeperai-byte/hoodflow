@@ -8,6 +8,7 @@ import {
   type TokenIdentity,
   type TokenSnapshot,
   type LiquiditySnapshot,
+  type HolderSummary,
   type ProviderResult,
 } from "@hoodflow/core";
 import { getChainConfig, type BlockscoutClient, type DexScreenerClient, type GoPlusClient } from "@hoodflow/providers";
@@ -16,6 +17,21 @@ export interface PipelineDeps {
   goplus: GoPlusClient;
   dexscreener: DexScreenerClient;
   blockscout: BlockscoutClient;
+  /**
+   * Phase 11 fix: `blockscout` is a single client instance scoped to one
+   * chain's explorer base URL (Blockscout is deployed per-chain — see
+   * `BlockscoutClient`'s own doc comment). Before this field existed,
+   * `fetchSnapshot` called it unconditionally for every registered chain,
+   * including chain 46630 (testnet — it IS in the chain registry, so it
+   * passes the route's chain-existence check), which meant a request for
+   * that chain would silently query the *mainnet* explorer and could
+   * return real holder data for an unrelated mainnet contract, misattributed
+   * to a testnet chain's report. This field records which chain the
+   * `blockscout` client above was actually constructed for, so
+   * `fetchSnapshot` can gate on it the same way it already gates
+   * DexScreener behind `dexScreenerSlugVerified`. See docs/DATA_SOURCES.md.
+   */
+  blockscoutChainId: number;
 }
 
 /**
@@ -29,7 +45,16 @@ export async function fetchSnapshot(deps: PipelineDeps, chainId: number, address
   const capturedAt = new Date().toISOString();
 
   const contractPromise = deps.goplus.getTokenSecurity(chainId, address);
-  const holdersPromise = deps.blockscout.getHolderSummary(address);
+  const holdersPromise: Promise<ProviderResult<HolderSummary>> =
+    chainId === deps.blockscoutChainId
+      ? deps.blockscout.getHolderSummary(address)
+      : Promise.resolve(
+          unavailable<HolderSummary>(
+            "blockscout",
+            DataState.DATA_UNAVAILABLE,
+            `Blockscout is only configured for chain ${deps.blockscoutChainId} in this build; holder data for chain ${chainId} is not available yet (see docs/DATA_SOURCES.md).`,
+          ),
+        );
   const liquidityPromise: Promise<ProviderResult<LiquiditySnapshot>> =
     chain?.dexScreenerSlug !== undefined
       ? deps.dexscreener.getTokenLiquidity(chain.dexScreenerSlug, address)

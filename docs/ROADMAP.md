@@ -94,6 +94,31 @@ again.
       holder-count figure — reinforcing why that supplementary check was
       always correctly treated as non-authoritative. No provider/core code
       changed. See docs/LIVE_VERIFICATION.md's Phase 10 section.
+- [x] Phase 11 — Durable-remote attempt + deployment readiness + security
+      audit: re-tested GitHub remote/auth status more rigorously than
+      Phase 10 (`git credential fill` run directly, not just config
+      inspection) — still no credential mechanism configured here;
+      re-confirmed the provider egress block with per-host `curl -v` +
+      correlated proxy-log evidence. The actual yield of this phase: a
+      first-ever deployment readiness audit found and fixed two real bugs
+      neither provider testing nor prior phases had caught — (1) a
+      cross-chain data-integrity bug where `apps/api` could have
+      misattributed real mainnet Blockscout holder data to a testnet-chain
+      report (fixed by gating the Blockscout call behind the chain it's
+      actually configured for, mirroring DexScreener's existing slug gate;
+      regression test added); (2) 2 HIGH + 2 moderate `pnpm audit`
+      advisories on a transitive `apps/web` production dependency
+      (`postcss`, via `next`), fixed with a version-pin override and
+      re-verified at zero vulnerabilities. Also added `apps/web/.env.example`
+      (parity with `apps/api`'s, a genuine deployment-reproducibility gap)
+      and corrected two stale documentation claims (a pre-Phase-8 "no CORS
+      needed yet" note, and a pre-Phase-8 "zero prod vulnerabilities" audit
+      note that had stopped covering `apps/web`'s dependency tree). 195
+      tests passing (194 + 1 new regression test), typecheck clean, build
+      clean, verified against the actual production build
+      (`dist/server.js` / `next start`), not just the dev server. See
+      docs/LIVE_VERIFICATION.md's Phase 11 section, docs/DATA_CONTRACT_AUDIT.md's
+      Phase 11 addendum, and docs/SECURITY.md's Phase 11 recheck.
 
 ## Next up
 
