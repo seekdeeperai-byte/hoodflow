@@ -3,14 +3,22 @@
 ## Pipeline
 
 ```
-TokenSnapshot (normalized provider data, per-domain DataState)
-  -> analyzeContract() / analyzeLiquidity()     Signal[]
-  -> detectRelationships()                       Relationship[]
-  -> buildEvidence()                              EvidenceItem[]
+TokenSnapshot (normalized provider data, per-domain DataState, + resolved identity)
+  -> analyzeContract() / analyzeLiquidity() / analyzeHolders()   Signal[]
+  -> detectRelationships()                       Relationship[]      (market signals only)
+  -> buildEvidence()                              EvidenceItem[]     (market signals only)
   -> buildInterpretations() + buildContractInterpretation()   Interpretation[]
   -> selectMarketState()                          { state, confidence }
+  -> analyzeIdentity()                            Signal[]           (appended after the above — see docs/IDENTITY_RESOLUTION.md)
   -> buildReport()                                HoodflowReport
 ```
+
+Identity signals (`source: "identity"`) are added to the final `signals`
+array *after* relationships/evidence/marketState are computed from the
+market-only signal set — this is deliberate, not an oversight: identity
+risk (Phase 5) is conceptually separate from contract/market risk and must
+never influence `marketState` or `score.dataQualityScore`. See
+docs/IDENTITY_RESOLUTION.md "Score integrity."
 
 Entry point: `packages/core/src/report/build-report.ts::buildReport`. It is
 a pure function — no I/O, no network, no randomness — so it's trivially

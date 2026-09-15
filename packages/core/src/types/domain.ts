@@ -13,6 +13,9 @@ export interface TokenIdentity {
 }
 
 export interface ContractSecurityData {
+  /** GoPlus's own token_name/token_symbol, when reported — contextual identity evidence only, see types/identity.ts. */
+  observedName?: string;
+  observedSymbol?: string;
   isOpenSource?: boolean;
   isProxy?: boolean;
   isUpgradeable?: boolean;
@@ -40,6 +43,9 @@ export interface ContractSecurityData {
 }
 
 export interface LiquiditySnapshot {
+  /** DexScreener's own baseToken.name/symbol, when reported — contextual identity evidence only, see types/identity.ts. */
+  observedName?: string;
+  observedSymbol?: string;
   dexId?: string;
   pairAddress?: string;
   priceUsd?: number;
@@ -54,6 +60,9 @@ export interface LiquiditySnapshot {
 }
 
 export interface HolderSummary {
+  /** Blockscout's own token.name/symbol, when reported — contextual identity evidence only, see types/identity.ts. */
+  observedName?: string;
+  observedSymbol?: string;
   holderCount?: number;
   top10Pct?: number;
   top20Pct?: number;
@@ -63,6 +72,8 @@ export interface HolderSummary {
 export interface TokenSnapshot {
   token: TokenIdentity;
   capturedAt: string;
+  /** Resolved deterministically from chain + contract address; see types/identity.ts and packages/core/src/identity/resolve-identity.ts. */
+  identity: import("./identity.js").IdentityResolution;
   contract: {
     state: import("./data-state.js").DataState;
     data?: ContractSecurityData;

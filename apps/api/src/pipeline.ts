@@ -1,4 +1,15 @@
-import { DataState, unavailable, type TokenSnapshot, type LiquiditySnapshot, type ProviderResult } from "@hoodflow/core";
+import {
+  DataState,
+  IdentityStatus,
+  isUsable,
+  resolveIdentity,
+  unavailable,
+  type ProviderObservedIdentity,
+  type TokenIdentity,
+  type TokenSnapshot,
+  type LiquiditySnapshot,
+  type ProviderResult,
+} from "@hoodflow/core";
 import { getChainConfig, type BlockscoutClient, type DexScreenerClient, type GoPlusClient } from "@hoodflow/providers";
 
 export interface PipelineDeps {
@@ -32,9 +43,36 @@ export async function fetchSnapshot(deps: PipelineDeps, chainId: number, address
 
   const [contract, holders, liquidity] = await Promise.all([contractPromise, holdersPromise, liquidityPromise]);
 
+  // Provider-observed name/symbol — contextual identity evidence only, gathered here
+  // (not inside @hoodflow/core, which has no I/O) from whichever provider domains came
+  // back usable. Never fabricated: a provider that returned nothing usable simply
+  // contributes nothing to this list. See docs/IDENTITY_RESOLUTION.md.
+  const providerObserved: ProviderObservedIdentity[] = [];
+  if (isUsable(contract.state) && (contract.data?.observedName || contract.data?.observedSymbol)) {
+    providerObserved.push({ provider: "goplus", name: contract.data.observedName, symbol: contract.data.observedSymbol });
+  }
+  if (isUsable(liquidity.state) && (liquidity.data?.observedName || liquidity.data?.observedSymbol)) {
+    providerObserved.push({ provider: "dexscreener", name: liquidity.data.observedName, symbol: liquidity.data.observedSymbol });
+  }
+  if (isUsable(holders.state) && (holders.data?.observedName || holders.data?.observedSymbol)) {
+    providerObserved.push({ provider: "blockscout", name: holders.data.observedName, symbol: holders.data.observedSymbol });
+  }
+
+  const normalizedAddress = address.toLowerCase();
+  const identity = resolveIdentity(chain?.knownTokens ?? [], chainId, normalizedAddress, providerObserved, capturedAt);
+
+  // TokenIdentity.name/symbol are populated ONLY when identity is CONFIRMED against the
+  // registry — i.e. only from data HOODFLOW itself has cross-checked, never from
+  // unverified provider claims presented as if authoritative (Phase 5 §4).
+  const token: TokenIdentity =
+    identity.status === IdentityStatus.CONFIRMED && identity.match
+      ? { chainId, address: normalizedAddress, name: identity.match.name, symbol: identity.match.symbol }
+      : { chainId, address: normalizedAddress };
+
   return {
-    token: { chainId, address: address.toLowerCase() },
+    token,
     capturedAt,
+    identity,
     contract: { state: contract.state, data: contract.data, error: contract.error },
     liquidity: { state: liquidity.state, data: liquidity.data, error: liquidity.error },
     holders: { state: holders.state, data: holders.data, error: holders.error },

@@ -11,6 +11,10 @@ export function normalizeDexScreenerPair(pair: DexScreenerPair): LiquiditySnapsh
   const buys = pair.txns?.h24?.buys;
   const sells = pair.txns?.h24?.sells;
   return {
+    // Contextual identity evidence only (Phase 5) — never authoritative on its own.
+    // See @hoodflow/core types/identity.ts.
+    observedName: pair.baseToken?.name,
+    observedSymbol: pair.baseToken?.symbol,
     dexId: pair.dexId,
     pairAddress: pair.pairAddress,
     priceUsd: pair.priceUsd !== undefined ? Number(pair.priceUsd) : undefined,

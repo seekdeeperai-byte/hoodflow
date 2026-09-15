@@ -20,5 +20,14 @@ export function normalizeBlockscoutHolders(token: BlockscoutToken, holders: Bloc
     top20Pct = (sum(20) / totalSupply) * 100;
   }
 
-  return { holderCount, top10Pct, top20Pct };
+  return {
+    // Contextual identity evidence only (Phase 5) — never authoritative on its own.
+    // Blockscout sends these as `string | null | undefined`; normalized to `undefined`
+    // (never an empty-string/null placeholder) to match ProviderObservedIdentity's optional-string contract.
+    observedName: token.name ?? undefined,
+    observedSymbol: token.symbol ?? undefined,
+    holderCount,
+    top10Pct,
+    top20Pct,
+  };
 }

@@ -1,6 +1,6 @@
 # HOODFLOW — Architecture
 
-Status: Phase 0–3 (foundation + first vertical slice). Last updated 2026-09-14.
+Status: Phase 0–5. Last updated 2026-09-15.
 
 ## 1. Discovery findings (Phase 0)
 
@@ -100,7 +100,8 @@ Provider (Blockscout | GoPlus | DexScreener)
    -> raw fetch + zod validation           [providers/*]
    -> ProviderResult<T> with DataState     [core/data-state]
 Normalization                              [core/normalize]
-Core Analyzers (contract, liquidity)       [core/analyzers]
+Identity (Phase 5)                         [core/identity, core/analyzers/identity-analyzer]
+Core Analyzers (contract, liquidity, holders) [core/analyzers]
 Signal Engine                              [core/signals]
 Relationship Engine                        [core/relationships]
 Evidence Engine                            [core/evidence]
@@ -109,9 +110,20 @@ HOODFLOW Report                            [core/report]
    -> Fastify route GET /v1/report/:chainId/:address
 ```
 
-Holders/wallet-cluster/deployer-history analyzers, the social/news/hype
-layers, and historical time-series intelligence are architected for (types
-exist in `core/types`) but not yet implemented — see `docs/ROADMAP.md`.
+Identity resolution (Phase 5, docs/IDENTITY_RESOLUTION.md) sits between
+Normalization and the Signal Engine: it decides what exact asset is being
+analyzed (chain + contract address, authoritative) before name/symbol
+context from any provider is interpreted. Its signals are appended to the
+report's `signals` array but deliberately excluded from the Relationship/
+Evidence Engine's market-signal contradiction sweep and from
+`marketState`/`score.dataQualityScore` — identity risk is informational and
+conceptually separate from contract/market risk.
+
+Wallet-cluster/deployer-history analyzers, the social/news/hype layers, and
+full historical time-series intelligence (beyond the minimal `HistoryStore`
+built in Phase 4 and reused as-is for identity in Phase 5) are architected
+for (types exist in `core/types`) but not yet implemented — see
+`docs/ROADMAP.md`.
 
 ## 5. Data integrity rules enforced in code
 

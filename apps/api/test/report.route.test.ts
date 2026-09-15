@@ -139,6 +139,78 @@ describe("GET /v1/report/:chainId/:address", () => {
     expect(body.dataQuality.contract).toBe("RATE_LIMITED");
   });
 
+  it("Phase 5: identity CONFIRMED with OFFICIAL_IDENTITY_MATCH for the real, official-docs USDG address, and token.name/symbol are populated from the registry match", async () => {
+    const USDG = "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168".toLowerCase();
+    const app = await buildApp(
+      config,
+      makeDeps({
+        contract: fakeResult(DataState.AVAILABLE, { observedName: "Global Dollar", observedSymbol: "USDG", holderCount: 341809 }),
+      }),
+    );
+    const res = await app.inject({ method: "GET", url: `/v1/report/4663/${USDG}` });
+    const body = res.json();
+    expect(body.identity.status).toBe("CONFIRMED");
+    expect(body.identity.match.source).toBe("official_docs");
+    expect(body.token.name).toBe("Global Dollar");
+    expect(body.token.symbol).toBe("USDG");
+    expect(body.signals.some((s: { signalType: string }) => s.signalType === "OFFICIAL_IDENTITY_MATCH")).toBe(true);
+    // Identity must never influence the score or market state (Phase 5 §5).
+    expect(body.score.dataQualityScore).toBe(Math.round((1 / 3) * 100));
+    await app.close();
+  });
+
+  it("Phase 5: identity CONFIRMED (live_confirmed_third_party) for the real registry GME address — the real Phase 4 naming-collision case study reaching the live route", async () => {
+    const GME = "0x7e86381A763F0Ecca2bDF27C54eAC403ddD48123".toLowerCase();
+    const app = await buildApp(
+      config,
+      makeDeps({
+        liquidity: fakeResult(DataState.AVAILABLE, { observedName: "GameStop on Robinhood Chain", observedSymbol: "GME", liquidityUsd: 178_000 }),
+      }),
+    );
+    const res = await app.inject({ method: "GET", url: `/v1/report/4663/${GME}` });
+    const body = res.json();
+    expect(body.identity.status).toBe("CONFIRMED");
+    expect(body.identity.match.source).toBe("live_confirmed_third_party");
+    expect(body.signals.some((s: { signalType: string }) => s.signalType === "IDENTITY_CONFIRMED")).toBe(true);
+    // Production registry currently has exactly one other GME-named entry: none (the
+    // memecoin's real address is unverified — see docs/IDENTITY_RESOLUTION.md), so no
+    // collision fires yet for THIS specific address. Confirms the resolver's collision
+    // path requires real, verified registry entries — it does not invent one.
+    expect(body.identity.conflicts).toHaveLength(0);
+    await app.close();
+  });
+
+  it("Phase 5: an unknown address whose provider-observed symbol matches the real registry's GME entry surfaces IDENTITY_MISMATCH — never presented as official", async () => {
+    const impostor = "0x999999999999999999999999999999999999999e"; // not in the registry
+    const app = await buildApp(
+      config,
+      makeDeps({
+        liquidity: fakeResult(DataState.AVAILABLE, { observedName: "GameStop on Robinhood Chain", observedSymbol: "GME", liquidityUsd: 500 }),
+      }),
+    );
+    const res = await app.inject({ method: "GET", url: `/v1/report/4663/${impostor}` });
+    const body = res.json();
+    expect(body.identity.status).toBe("CONFLICTING");
+    expect(body.identity.match).toBeNull();
+    expect(body.token.name).toBeUndefined(); // never populated from an unconfirmed match
+    expect(body.token.symbol).toBeUndefined();
+    expect(body.signals.some((s: { signalType: string }) => s.signalType === "IDENTITY_MISMATCH")).toBe(true);
+    expect(body.signals.some((s: { signalType: string }) => s.signalType === "OFFICIAL_IDENTITY_MATCH")).toBe(false);
+    const mismatch = body.signals.find((s: { signalType: string }) => s.signalType === "IDENTITY_MISMATCH");
+    expect((mismatch.evidence as string).toLowerCase()).not.toMatch(/\bscam\b|\bfake\b|\bfraud\b/);
+    await app.close();
+  });
+
+  it("Phase 5: an address with no registry match and no provider context returns IDENTITY_UNVERIFIED and never crashes the report", async () => {
+    const app = await buildApp(config, makeDeps({}));
+    const res = await app.inject({ method: "GET", url: `/v1/report/4663/${ADDRESS}` });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.identity.status).toBe("UNVERIFIED");
+    expect(body.signals.some((s: { signalType: string }) => s.signalType === "IDENTITY_UNVERIFIED")).toBe(true);
+    await app.close();
+  });
+
   it("HOLDER_GROWTH appears on a second scan of the same token (via a shared HistoryStore) but not on the first", async () => {
     let holderCount = 1000;
     const deps = {

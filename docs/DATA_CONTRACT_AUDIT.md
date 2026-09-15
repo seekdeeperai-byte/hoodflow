@@ -180,6 +180,24 @@ this chain), 429 → `RATE_LIMITED`, 5xx → `PROVIDER_UNAVAILABLE`, other 4xx
   one. All three now handle 403/404-or-N/A/429/5xx/other-4xx explicitly
   rather than falling through to a generic catch-all.
 
+## Phase 5 addendum — identity-observed fields
+
+Phase 5 added one field pair to each of the three normalized domain types,
+sourced from data each provider was already returning (and already parsed
+by that provider's zod schema) but not previously surfaced:
+
+| Field | Source | Optional? | Absent means | Verified how |
+|---|---|---|---|---|
+| `ContractSecurityData.observedName`/`.observedSymbol` | GoPlus `token_name`/`token_symbol` | yes | GoPlus did not report a name/symbol for this address | LIVE (USDG: "Global Dollar"/"USDG", see docs/LIVE_VERIFICATION.md) |
+| `LiquiditySnapshot.observedName`/`.observedSymbol` | DexScreener `baseToken.name`/`.symbol` | yes | not reported for this pair | UNIT (schema already modeled these as optional; not independently re-verified live this phase) |
+| `HolderSummary.observedName`/`.observedSymbol` | Blockscout `token.name`/`.symbol` | yes | not reported; Blockscout sends `string \| null`, normalized to `undefined` — never an empty string or `null` placeholder | DOCS-ONLY (Blockscout remains network-blocked — see docs/LIVE_VERIFICATION.md; a regression test confirms the `null`→`undefined` normalization specifically, packages/providers/test/blockscout.test.ts) |
+
+These fields are explicitly **contextual identity evidence only** — see
+docs/IDENTITY_RESOLUTION.md. Nothing in the identity resolver, or anywhere
+else, treats them as authoritative on their own; they are cross-checked
+against the known-token registry, never substituted for a contract-address
+match.
+
 ## What this audit does NOT cover (honest scope boundary)
 
 - It does not re-derive or re-verify GoPlus/DexScreener field values

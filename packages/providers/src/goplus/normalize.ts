@@ -36,6 +36,10 @@ export function normalizeGoPlus(result: GoPlusTokenResult): ContractSecurityData
     : undefined;
 
   return {
+    // Contextual identity evidence only (Phase 5) — never authoritative on its own.
+    // See @hoodflow/core types/identity.ts.
+    observedName: result.token_name,
+    observedSymbol: result.token_symbol,
     isOpenSource: bool(result.is_open_source),
     isProxy: bool(result.is_proxy),
     isUpgradeable: bool(result.is_proxy), // GoPlus doesn't separately flag upgradeability; proxy implies it.

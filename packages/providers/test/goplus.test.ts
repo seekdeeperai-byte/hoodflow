@@ -20,6 +20,10 @@ describe("GoPlusClient", () => {
     expect(result.data?.holderCount).toBe(842);
     expect(result.data?.top10HolderPct).toBeCloseTo(34); // (0.18+0.09+0.07)*100
     expect(result.httpStatus).toBe(200);
+    // Phase 5: contextual identity fields, surfaced from token_name/token_symbol for the
+    // identity resolver's providerObserved input — never authoritative on their own.
+    expect(result.data?.observedName).toBe("Example Token");
+    expect(result.data?.observedSymbol).toBe("EXT");
   });
 
   it("treats an empty-string buy_tax/sell_tax as 0%, matching a real live GoPlus response for chain 4663 (see docs/LIVE_VERIFICATION.md)", async () => {

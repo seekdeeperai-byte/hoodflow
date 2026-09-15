@@ -5,6 +5,8 @@ export * from "./history/in-memory-history-store.js";
 export * from "./analyzers/contract-analyzer.js";
 export * from "./analyzers/liquidity-analyzer.js";
 export * from "./analyzers/holders-analyzer.js";
+export * from "./analyzers/identity-analyzer.js";
+export * from "./identity/resolve-identity.js";
 export * from "./relationships/relationship-engine.js";
 export * from "./evidence/evidence-engine.js";
 export * from "./interpretation/interpretation-engine.js";

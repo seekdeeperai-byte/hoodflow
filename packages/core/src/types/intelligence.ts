@@ -33,6 +33,18 @@ export const SignalType = {
   // Market/flow
   BUY_SELL_IMBALANCE: "BUY_SELL_IMBALANCE",
   PRICE_MOMENTUM: "PRICE_MOMENTUM",
+
+  // Identity (Phase 5) — see packages/core/src/analyzers/identity-analyzer.ts.
+  // Deliberately kept out of detectRelationships()/buildEvidence()'s market-signal
+  // contradiction sweep: identity risk is conceptually separate from contract/market
+  // risk (docs/IDENTITY_RESOLUTION.md).
+  IDENTITY_CONFIRMED: "IDENTITY_CONFIRMED",
+  IDENTITY_AMBIGUITY: "IDENTITY_AMBIGUITY",
+  IDENTITY_MISMATCH: "IDENTITY_MISMATCH",
+  IDENTITY_UNVERIFIED: "IDENTITY_UNVERIFIED",
+  IDENTITY_COLLISION: "IDENTITY_COLLISION",
+  OFFICIAL_IDENTITY_MATCH: "OFFICIAL_IDENTITY_MATCH",
+  NON_OFFICIAL_IDENTITY_CONTEXT: "NON_OFFICIAL_IDENTITY_CONTEXT",
 } as const;
 export type SignalType = (typeof SignalType)[keyof typeof SignalType];
 
@@ -129,6 +141,14 @@ export interface HoodflowReport {
   generatedAt: string;
   /** OBSERVATION_TIME vs FETCH_TIME/SERVE_TIME — see packages/core/src/freshness.ts. */
   dataFreshness: import("../freshness.js").DataFreshnessInfo;
+  /**
+   * "What exact asset are we analyzing?" — resolved deterministically from
+   * chain + contract address against the known-token registry, with
+   * provider-observed name/symbol as contextual (never authoritative)
+   * evidence. See docs/IDENTITY_RESOLUTION.md. Informational: never an
+   * input to `score.dataQualityScore` or `marketState` (Phase 5 §5/§24).
+   */
+  identity: import("./identity.js").IdentityResolution;
   score: {
     /** Data-completeness / confidence composite, NOT a buy/sell score. 0-100. */
     dataQualityScore: number;

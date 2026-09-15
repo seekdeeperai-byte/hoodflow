@@ -24,6 +24,23 @@ describe("BlockscoutClient", () => {
     expect(result.state).toBe(DataState.AVAILABLE);
     expect(result.data?.holderCount).toBe(842);
     expect(result.data?.top10Pct).toBeCloseTo(34); // (180000+90000+70000)/1000000 * 100
+    // Phase 5: contextual identity fields from the token endpoint's name/symbol.
+    expect(result.data?.observedName).toBe("Example Token");
+    expect(result.data?.observedSymbol).toBe("EXT");
+  });
+
+  it("normalizes a null name/symbol (Blockscout's own nullable contract) to undefined, never an empty string or null placeholder", async () => {
+    const tokenFixture = { ...loadFixture("blockscout-token.json"), name: null, symbol: null };
+    const client = new BlockscoutClient({
+      baseUrl: BASE_URL,
+      fetchImpl: mockFetchSequence([
+        { status: 200, body: tokenFixture },
+        { status: 200, body: loadFixture("blockscout-holders.json") },
+      ]),
+    });
+    const result = await client.getHolderSummary(ADDRESS);
+    expect(result.data?.observedName).toBeUndefined();
+    expect(result.data?.observedSymbol).toBeUndefined();
   });
 
   it("returns PARTIAL when the holders page fails but token metadata succeeds", async () => {

@@ -1,8 +1,68 @@
 # HOODFLOW — Security
 
-Status as of this build (Phase 0–4). This is a living document — update it
+Status as of this build (Phase 0–5). This is a living document — update it
 every time a new attack surface (new provider, new route, LLM integration,
 DB) is added.
+
+## Phase 5 recheck (2026-09-15)
+
+Re-audited specifically against what changed this phase: `resolveIdentity`/
+`analyzeIdentity` (packages/core/src/identity/, .../analyzers/
+identity-analyzer.ts), the `observedName`/`observedSymbol` fields added to
+three provider domain types, and the `KnownToken` move into
+`@hoodflow/core`. Full detail in docs/IDENTITY_RESOLUTION.md's own
+"Security review" section — summarized here:
+
+- **No new SSRF/URL surface.** Identity resolution is pure computation
+  over already-fetched, already-validated data — it never constructs a URL
+  or makes a network call. Confirmed by reading `resolve-identity.ts` top
+  to bottom: the only external input touched is `address` (re-validated
+  against a local copy of the existing EVM-address regex) and the
+  already-fetched `knownTokens`/`providerObserved` arrays.
+- **No new input-validation gap.** `chainId`/`address` still go through
+  the same zod `ParamsSchema` + `isValidEvmAddress()` gate in
+  `apps/api/src/routes/report.ts` as before — nothing about Phase 5 adds a
+  second, weaker validation path. (`resolveIdentity`'s own defensive regex
+  check is redundant-by-design for production traffic, since the route
+  already rejects malformed addresses first — it only matters for direct/
+  unit callers, and is covered by a test.)
+- **Registry data-entry bug class, not a live vulnerability, now has a
+  regression test.** `CHAINS` is a compile-time TypeScript literal with no
+  runtime write path, so "malicious registry ingestion" isn't reachable —
+  but a real *authoring* mistake (two entries sharing an address, or a
+  synthetic `test_fixture` entry accidentally landing in a real chain's
+  registry) would be a genuine correctness bug. Added:
+  `packages/providers/test/chains.test.ts` now asserts no chain's real
+  registry has a duplicate address and that no entry uses the
+  `test_fixture` source (reserved for `packages/core/test/*` fixtures).
+- **No new DoS/enumeration surface.** `resolveIdentity` is
+  O(knownTokens.length); the registry holds 0–3 entries per chain today.
+  The existing per-IP rate limiter (`@fastify/rate-limit`, unchanged)
+  still bounds request volume; nothing about identity resolution changes
+  that surface's shape.
+- **No new secret/log-leakage path.** The route's log line is unchanged
+  (`{chainId, addressPrefix}` only); provider-observed name/symbol strings
+  flow into the JSON response and into `pino`'s structured logger as
+  ordinary field values, never via string interpolation into a log
+  message or URL — the same pattern already used for `evidence` strings
+  since Phase 0.
+- **Score integrity double-checked, not just asserted.** A near-miss was
+  caught and fixed during this phase's own implementation (not by a
+  reviewer after the fact): an early version of the `build-report.ts`
+  change let identity limitations leak into
+  `dataQuality.overallConfidencePenalty`'s calculation, which would have
+  been a real, unintended score-adjacent behavior change. Fixed by
+  capturing `marketLimitationsCount` before any identity limitation is
+  considered — see docs/IDENTITY_RESOLUTION.md "Score integrity" for the
+  full account. `score.dataQualityScore` and `marketState` were verified
+  (by test, not just by reading the code) to be identical whether or not
+  identity signals are present — see
+  `packages/core/test/build-report.test.ts`'s assertion that
+  `overallConfidencePenalty` for an all-unavailable snapshot is
+  unaffected by the (now-always-present) `IDENTITY_UNVERIFIED` signal.
+- **Dependency audit re-run:** unchanged from Phase 0–4 — zero
+  vulnerabilities in production dependencies, same 6 dev-only advisories.
+  No new dependencies were added this phase.
 
 ## Phase 4 recheck (2026-09-14)
 

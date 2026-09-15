@@ -3,14 +3,19 @@ import { buildReport } from "../src/report/build-report.js";
 import { DataState } from "../src/types/data-state.js";
 import type { TokenSnapshot } from "../src/types/domain.js";
 import { MarketState } from "../src/types/intelligence.js";
+import { resolveIdentity } from "../src/identity/resolve-identity.js";
 
 const baseToken = { chainId: 4663, address: "0x1111111111111111111111111111111111111111" };
 const now = new Date().toISOString();
+// Empty registry -> UNVERIFIED, the correct/expected identity outcome for these tests'
+// synthetic address, which isn't meant to represent any real known token.
+const unverifiedIdentity = resolveIdentity([], baseToken.chainId, baseToken.address, [], now);
 
 function snapshot(overrides: Partial<TokenSnapshot>): TokenSnapshot {
   return {
     token: baseToken,
     capturedAt: now,
+    identity: unverifiedIdentity,
     contract: { state: DataState.DATA_UNAVAILABLE },
     liquidity: { state: DataState.DATA_UNAVAILABLE },
     holders: { state: DataState.DATA_UNAVAILABLE },
@@ -22,9 +27,15 @@ describe("buildReport", () => {
   it("returns INSUFFICIENT_DATA and explicit limitations when nothing is available", () => {
     const report = buildReport(snapshot({}));
     expect(report.marketState.state).toBe(MarketState.INSUFFICIENT_DATA);
-    expect(report.signals).toHaveLength(0);
+    // No contract/liquidity/holders signals — but identity resolution always runs (it needs
+    // no provider data of its own) and correctly emits IDENTITY_UNVERIFIED for an address
+    // that isn't in the registry. Phase 5: identity signals are informational and must not
+    // affect marketState/dataQualityScore (asserted below), only report.signals.
+    expect(report.signals.filter((s) => s.source !== "identity")).toHaveLength(0);
+    expect(report.signals.map((s) => s.signalType)).toEqual(["IDENTITY_UNVERIFIED"]);
     expect(report.limitations.length).toBeGreaterThan(0);
     expect(report.score.dataQualityScore).toBe(0);
+    expect(report.dataQuality.overallConfidencePenalty).toBe("LOW"); // unchanged from Phase 0-4: driven only by contract/liquidity/holders unavailability
   });
 
   it("never fabricates social/news data — always DATA_UNAVAILABLE in this build", () => {

@@ -4,6 +4,7 @@ import { DataState } from "../src/types/data-state.js";
 import type { TokenSnapshot } from "../src/types/domain.js";
 import type { HoodflowReport } from "../src/types/intelligence.js";
 import { buildReport } from "../src/report/build-report.js";
+import { resolveIdentity } from "../src/identity/resolve-identity.js";
 
 const TOKEN = { chainId: 4663, address: "0x1111111111111111111111111111111111111111" };
 
@@ -11,6 +12,7 @@ function snapshotAt(capturedAt: string, holderCount: number): TokenSnapshot {
   return {
     token: TOKEN,
     capturedAt,
+    identity: resolveIdentity([], TOKEN.chainId, TOKEN.address, [], capturedAt),
     contract: { state: DataState.DATA_UNAVAILABLE },
     liquidity: { state: DataState.DATA_UNAVAILABLE },
     holders: { state: DataState.AVAILABLE, data: { holderCount } },

@@ -18,6 +18,9 @@ describe("DexScreenerClient", () => {
     expect(result.data?.liquidityUsd).toBe(96000);
     expect(result.data?.dexId).toBe("uniswap");
     expect(result.data?.marketCapUsd).toBe(3400000);
+    // Phase 5: contextual identity fields from baseToken.name/symbol.
+    expect(result.data?.observedName).toBe("Example Token");
+    expect(result.data?.observedSymbol).toBe("EXT");
   });
 
   it("returns DATA_UNAVAILABLE on 404 (chain/token not indexed)", async () => {
