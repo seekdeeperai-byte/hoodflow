@@ -75,4 +75,16 @@ describe("BlockscoutClient", () => {
     const result = await client.getHolderSummary("nope");
     expect(result.state).toBe(DataState.INVALID_INPUT);
   });
+
+  // Phase 9 audit: every other client (GoPlus) already had a schema-validation-failure
+  // test, but this branch of BlockscoutClient — real production code, not test-only —
+  // had no coverage of its own. Every field on BlockscoutTokenSchema is individually
+  // optional, so only a non-object root (e.g. a malformed/degraded response body of
+  // `null`) actually fails it — a plain `{}` would pass.
+  it("returns ERROR when the token response is not a well-formed object", async () => {
+    const client = new BlockscoutClient({ baseUrl: BASE_URL, fetchImpl: mockFetchOnce(200, null) });
+    const result = await client.getHolderSummary(ADDRESS);
+    expect(result.state).toBe(DataState.ERROR);
+    expect(result.data).toBeUndefined();
+  });
 });

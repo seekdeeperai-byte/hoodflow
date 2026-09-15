@@ -198,6 +198,57 @@ else, treats them as authoritative on their own; they are cross-checked
 against the known-token registry, never substituted for a contract-address
 match.
 
+## Phase 9 addendum — audit re-check + confirmed-but-unfixed gaps
+
+Phase 9 re-read every file this audit describes (schemas, normalizers,
+clients, and the analyzers that consume their output) against the actual
+current repository rather than trusting this document, and found it still
+accurate. Three real gaps were newly confirmed during that re-check. None
+were fixed this phase — each is explained below, with the reasoning for
+leaving it alone, per Phase 9's rule to stop and report rather than guess
+at an unclear provider contract or make an unrequested core-logic change:
+
+- **`ContractSecurityData.maxWalletPct`/`.maxTxPct` are dead code.**
+  `packages/core/src/analyzers/contract-analyzer.ts` reads these two fields
+  to populate `MAX_WALLET_RESTRICTION`/`MAX_TX_RESTRICTION` signals, but
+  neither `packages/providers/src/goplus/schema.ts` nor `normalize.ts`
+  populates them from any GoPlus wire field — GoPlus's `token_security`
+  response was never confirmed (live or in docs) to expose a
+  max-wallet/max-tx-limit field at all. This isn't a normalization bug
+  (nothing is silently defaulting these to false); the signals are simply
+  never emitted. Left unfixed: whether GoPlus's real API even has an
+  equivalent field is unclear from what this session could verify (the
+  live GoPlus response captured in Phase 4/Phase 9 — see
+  docs/LIVE_VERIFICATION.md — did not include one), which is exactly the
+  "provider API contract is unclear" stop condition Phase 9 calls out
+  rather than a safe-to-guess implementation gap.
+- **DexScreener `priceUsd` has no `NaN`-guard at the normalize step**
+  (`Number(v)` on a malformed numeric string would pass through as `NaN`
+  rather than becoming `undefined`), unlike every other numeric field
+  audited above. Traced during Phase 9: `priceUsd` is not currently read by
+  `packages/core/src/analyzers/liquidity-analyzer.ts` or anywhere else
+  downstream, so this gap is real but currently inert — fixing it would be
+  an unrequested core-logic touch to a field nothing consumes yet, out of
+  scope for a phase whose rule is "implement only what's missing that the
+  architecture actually requires."
+- **`BlockscoutClient` is hardcoded to chain 4663's `baseUrl` at server
+  startup** (`apps/api/src/server.ts`) — confirmed still true, unchanged
+  since it was first self-documented. Zero practical impact today, since
+  chain 4663 is the only chain with `dexScreenerSlugVerified`/confirmed
+  provider support at all; tracked in docs/ROADMAP.md.
+
+Separately, two real, confirmed, *symmetric* test-coverage gaps were found
+and fixed this phase (not schema/normalization changes — test-only):
+`DexScreenerClient` and `BlockscoutClient` each have the same
+schema-validation-failure branch that `GoPlusClient` already had a
+regression test for, but neither had one of their own. Added:
+`packages/providers/test/dexscreener.test.ts` ("returns ERROR on a
+response that fails schema validation" — a `pairs` field present but the
+wrong type) and `packages/providers/test/blockscout.test.ts` ("returns
+ERROR when the token response is not a well-formed object" — a non-object
+root value, since every individual `BlockscoutTokenSchema` field is
+independently optional and only a non-object root actually fails it).
+
 ## What this audit does NOT cover (honest scope boundary)
 
 - It does not re-derive or re-verify GoPlus/DexScreener field values

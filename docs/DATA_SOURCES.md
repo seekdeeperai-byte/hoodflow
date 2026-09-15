@@ -4,9 +4,9 @@
 
 | Domain | Provider | Endpoint | Auth | Status |
 |---|---|---|---|---|
-| Contract security | GoPlus Security Token Security API v1 | `GET api.gopluslabs.io/api/v1/token_security/{chain_id}?contract_addresses=...` | Optional Bearer token (higher limits) | Implemented, chain-4663 support unverified (see below) |
-| Liquidity / market | DexScreener | `GET api.dexscreener.com/token-pairs/v1/{chainSlug}/{address}` | None documented | Implemented, Robinhood Chain slug unverified (see below) |
-| Holders | Blockscout REST API v2 (official Robinhood Chain explorer) | `GET {baseUrl}/api/v2/tokens/{address}` + `.../holders` | Optional Bearer token (5 rps free / 100k credits/day without) | Implemented |
+| Contract security | GoPlus Security Token Security API v1 | `GET api.gopluslabs.io/api/v1/token_security/{chain_id}?contract_addresses=...` | Optional Bearer token (higher limits) | Implemented; chain-4663 support live-confirmed (Phase 4, re-confirmed Phase 9 — see below). Repo's own client code still unexercised against live traffic from this sandbox. |
+| Liquidity / market | DexScreener | `GET api.dexscreener.com/token-pairs/v1/{chainSlug}/{address}` | None documented | Implemented; Robinhood Chain slug live-confirmed as `"robinhood"` (Phase 4 — see below). Repo's own client code still unexercised against live traffic from this sandbox. |
+| Holders | Blockscout REST API v2 (official Robinhood Chain explorer) | `GET {baseUrl}/api/v2/tokens/{address}` + `.../holders` | Optional Bearer token (5 rps free / 100k credits/day without) | Implemented; wire shape unverified against live traffic — every attempt (including the policy-trusted `WebFetch` path that worked for GoPlus/DexScreener) is blocked by the explorer's own WAF, not this sandbox's egress policy (see docs/LIVE_VERIFICATION.md). |
 
 ## Not yet implemented (architected for, see docs/ROADMAP.md)
 
@@ -30,24 +30,30 @@
   post specifically about powering Robinhood Chain), so it's treated as the
   ground-truth source for holder counts and contract metadata on this
   chain, ahead of Etherscan-style alternatives.
-- **GoPlus chain-4663 support is unverified.** GoPlus's supported-chain list
-  wasn't enumerable from the documentation pages reachable during Phase 0
-  research, and this sandbox cannot make a live test call (see
-  docs/ARCHITECTURE.md §2). The client is written to degrade to
-  `DATA_UNAVAILABLE` cleanly (`result: {}` from GoPlus) rather than assume
-  support — this needs to be checked against a live call the first time
-  this code runs somewhere with real network egress.
-- **DexScreener's chain slug for Robinhood Chain is unverified** for the
-  same reason. `packages/providers/src/chains.ts` leaves
-  `dexScreenerSlug: undefined` for both Robinhood Chain entries on purpose;
-  the API pipeline (`apps/api/src/pipeline.ts`) checks this and skips the
-  DexScreener call entirely when the slug is unset, returning
-  `DATA_UNAVAILABLE` with an explanatory message rather than guessing a
-  slug and silently getting empty/wrong results. **Action for whoever runs
-  this next**: confirm DexScreener's Robinhood Chain slug (check
-  https://dexscreener.com for a Robinhood Chain filter, or query
-  `/token-pairs/v1/{guess}/...` for a known Robinhood Chain pair) and set
-  it in `chains.ts`, flipping `dexScreenerSlugVerified: true`.
+- **GoPlus chain-4663 support is confirmed.** A Phase 4 live call (via a
+  policy-trusted fetch path available to that build session, distinct from
+  this sandbox's blocked general network — see docs/ARCHITECTURE.md §2)
+  returned a real, populated result for chain 4663, and GoPlus's own
+  supported-chain listing explicitly lists "Robinhood (4663)." Phase 9
+  re-ran the same live check and got fresh, current data (holder_count had
+  grown since Phase 4). Full detail: docs/LIVE_VERIFICATION.md. What
+  remains unverified is `packages/providers`' own `GoPlusClient` code
+  executing against live traffic — that still hasn't happened from inside
+  this sandbox in any phase; `scripts/verify-live-providers.ts` is built to
+  close that gap from an environment with real network egress.
+- **DexScreener's chain slug for Robinhood Chain is confirmed: `"robinhood"`**
+  (a Phase 0 guess of `"robinhoodchain"` was checked in Phase 4 and found
+  wrong — an empty response for the wrong slug is indistinguishable from
+  "no pairs" by design, which is exactly why this needed a positive-control
+  live check rather than an empty-response check). `packages/providers/src/chains.ts`
+  now sets `dexScreenerSlug: "robinhood"` and `dexScreenerSlugVerified: true`
+  for chain 4663. The testnet (46630) slug remains unverified and stays
+  `undefined`; the API pipeline (`apps/api/src/pipeline.ts`) skips the
+  DexScreener call entirely whenever `dexScreenerSlugVerified` is not
+  `true` for the requested chain, returning `DATA_UNAVAILABLE` with an
+  explanatory message rather than guessing. As with GoPlus,
+  `DexScreenerClient`'s own code executing against live traffic remains
+  unverified from this sandbox — see docs/LIVE_VERIFICATION.md.
 
 ## Rate limits (as documented, unverified against live traffic from this build)
 

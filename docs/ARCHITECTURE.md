@@ -1,6 +1,6 @@
 # HOODFLOW — Architecture
 
-Status: Phase 0–6. Last updated 2026-09-15.
+Status: Phase 0–9. Last updated 2026-09-15 (Phase 9).
 
 ## 1. Discovery findings (Phase 0)
 
@@ -26,19 +26,23 @@ Verified via live web research on 2026-09-14 (sources at bottom):
 - **GoPlus Security's Token Security API** is a per-chain-id REST endpoint
   (`GET /api/v1/token_security/{chain_id}?contract_addresses=...`), works
   without a key at low volume and accepts an optional Bearer token for
-  higher limits. GoPlus's supported-chain list is maintained independently
-  of any one chain's launch; **whether chain 4663 is already onboarded is
-  unverified as of this writing** — the provider is built to degrade to
-  `PROVIDER_UNAVAILABLE` cleanly if the chain isn't recognized, rather than
-  assuming support.
+  higher limits. **Chain 4663 support is confirmed** — Phase 4 obtained a
+  real live response for chain 4663 (USDG) via a policy-trusted fetch path
+  distinct from this sandbox's blocked general network, and GoPlus's own
+  supported-chain listing explicitly includes "Robinhood (4663)"; Phase 9
+  re-ran the same check and got a fresh, current response (holder_count
+  had grown since Phase 4, confirming this wasn't a cached/stale result).
+  See docs/LIVE_VERIFICATION.md. The provider still degrades to
+  `PROVIDER_UNAVAILABLE`/`DATA_UNAVAILABLE` cleanly if a future chain isn't
+  recognized.
 - **DexScreener's API** is pair/liquidity data keyed by `chainId` (a slug,
-  not a numeric id, e.g. `ethereum`, `base`). It documents ~60+ chains but
-  the docs excerpt available to us does not enumerate them, and this
-  sandbox cannot make a live test call (see §2). **Robinhood Chain
-  DexScreener support is unverified** and, given the chain is two months
-  old, plausibly not yet indexed. This is treated as an expected
-  `DATA_UNAVAILABLE` condition, not a bug — HOODFLOW is designed to say "no
-  liquidity data available" rather than fabricate it.
+  not a numeric id, e.g. `ethereum`, `base`). **Robinhood Chain support is
+  confirmed, and the slug is `"robinhood"`** (a Phase 0 guess of
+  `"robinhoodchain"` was checked in Phase 4 and found wrong — an empty
+  result for the wrong slug is indistinguishable from "no pairs" by
+  design, which is exactly why this needed a positive-control live check).
+  `packages/providers/src/chains.ts` sets `dexScreenerSlugVerified: true`
+  for chain 4663 accordingly. See docs/LIVE_VERIFICATION.md.
 - No existing HOODFLOW repository, database, or credentials exist in this
   environment. Node 22 / pnpm 10 / Python 3.11 / git / Docker are
   available; PostgreSQL and Redis binaries are installed but **not
@@ -50,18 +54,40 @@ This build environment's outbound network access is policy-restricted: the
 sandbox's shell can reach package registries (npm, PyPI, etc.) directly,
 but arbitrary third-party hosts (`api.gopluslabs.io`, `api.dexscreener.com`,
 `*.blockscout.com`, chain RPC endpoints) return `403` at the egress proxy.
-Only the `WebSearch`/`WebFetch` tools (used for the research above) can
-reach the open web from here.
+This is the network path `packages/providers`' own HTTP client (Node
+`fetch`, via `packages/providers/src/http.ts`) actually uses — so the
+repo's real provider client code has never executed a successful call
+against a live provider from inside this sandbox, in any phase through
+Phase 9.
+
+**A separate, policy-trusted fetch path exists and matters here.** The
+`WebFetch` tool (used for the research in §1, and again in Phase 4/Phase 9)
+is a first-party fetcher, distinct from the sandbox's general-purpose
+network access, that *can* reach some of these hosts — confirmed for
+`api.gopluslabs.io` and `api.dexscreener.com` (Phase 4, re-confirmed with
+fresh live data in Phase 9), but not `*.blockscout.com` (blocked by that
+host's own WAF/bot-protection, a different 403 than the egress block, per
+docs/LIVE_VERIFICATION.md). This let Phase 4/9 confirm real API *shape and
+current behavior* for two of the three providers, but it does **not** run
+`packages/providers`' own client code — a genuinely different transport,
+and using it to make the repo's own clients "work" from here would mean
+inventing a new transport mechanism outside the repo's documented
+architecture, which HOODFLOW's phase rules explicitly disallow. See
+docs/LIVE_VERIFICATION.md for the full distinction and evidence.
 
 **Consequence:** provider integrations in this repo are built and tested
-against **documented API contracts and realistic fixtures**, not live
-traffic, because live traffic isn't reachable from this sandbox. This is
-explicitly allowed by the project's own data-integrity rules (fixtures for
-tests/dev only) but it also means: **live-provider correctness is
-UNVERIFIED until this code runs somewhere with real egress** (a real
-deploy target, or the user's own machine/network). Nothing in this codebase
-silently substitutes fixture data for production traffic — the fixtures
-live only in `*/test/fixtures` and are wired only into test files.
+against **documented/live-confirmed API contracts and realistic
+fixtures**, not live traffic through the repo's own client code, because
+that traffic isn't reachable from this sandbox. This is explicitly allowed
+by the project's own data-integrity rules (fixtures for tests/dev only)
+but it also means: **whether `packages/providers`' own HTTP client code
+executes correctly end-to-end against a live provider is UNVERIFIED until
+this code runs somewhere with real egress** (a real deploy target, or the
+user's own machine/network) — `scripts/verify-live-providers.ts` is built
+to close exactly this gap the moment that's possible. Nothing in this
+codebase silently substitutes fixture data for production traffic — the
+fixtures live only in `*/test/fixtures` and are wired only into test
+files.
 
 ## 3. Why this stack
 

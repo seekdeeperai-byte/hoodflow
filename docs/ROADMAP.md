@@ -13,7 +13,11 @@ stale, per the "living document" convention used throughout docs/. Most
 recent renumbering: Phase 6 turned out to be historical intelligence (not
 social/news/hype, this doc's earlier guess) — social/news/hype, the
 frontend, and hardening/deployment have each shifted down one number
-accordingly.
+accordingly. Phase 9 was then actually spent on a live-data provider audit
+(not hardening/deployment, this doc's prior guess for that number) — so
+hardening/deployment is listed below without a fixed number until it's
+actually scheduled, rather than guessing another number that may shift
+again.
 
 ## Done (this build)
 
@@ -51,6 +55,29 @@ accordingly.
       layers from the product spec, a DEMO/LIVE-labeled sample report, and
       real DATA_UNAVAILABLE/first-scan handling throughout. See
       docs/FRONTEND.md.
+- [x] Phase 8.1 — Browser QA + UX polish: real-browser (headless Chromium)
+      validation of the Phase 8 frontend, contrast/typography/responsive
+      fixes found only by actually rendering the app (see
+      `apps/web/app/globals.css`, `apps/web/components/ui.module.css`,
+      `apps/web/components/WhatChanged.tsx`) — no new features, no report
+      schema changes.
+- [x] Phase 9 — Live data provider audit + real-data integration attempt:
+      full re-audit of the GoPlus/DexScreener/Blockscout/RPC provider
+      pipeline against the actual repository (not assumed from prior
+      docs); re-confirmed GoPlus and DexScreener's live API shape via a
+      policy-trusted fetch path with fresh data nine days after Phase 4
+      (holder_count moved, proving currency); confirmed the sandbox's
+      general network still cannot reach any provider, including via the
+      repo's own `scripts/verify-live-providers.ts` run against the real
+      client code; proved the full pipeline (identity, dataQuality,
+      marketState, Historical Intelligence's INSUFFICIENT_HISTORY→
+      COMPARABLE transition) end-to-end against a real running API with
+      zero fabricated data even with every external provider unavailable;
+      closed two confirmed provider test-coverage gaps
+      (`packages/providers/test/dexscreener.test.ts`,
+      `.../blockscout.test.ts`). No provider became live-reachable from
+      this sandbox; no provider/core code changed. See
+      docs/LIVE_VERIFICATION.md and docs/DATA_CONTRACT_AUDIT.md.
 
 ## Next up
 
@@ -59,7 +86,9 @@ accordingly.
    scope a first pass around "does this contract's creator have other
    deployments" before attempting full wallet-cluster analysis. Also
    blocked, same as Blockscout holder data, on Blockscout's live wire
-   shape remaining unverified (docs/LIVE_VERIFICATION.md).
+   shape remaining unverified (docs/LIVE_VERIFICATION.md). No deployer
+   analyzer or wallet-intelligence provider exists at all yet — confirmed
+   during the Phase 9 audit, not newly discovered.
 2. **Phase 7 — Social + news + hype.** Every social source realistically
    needs either a paid API tier or an account-owner decision (X API access
    tier, Reddit API app registration, a licensed news feed) — see "needs
@@ -77,7 +106,8 @@ accordingly.
    but it needs a real minimum-sample-size policy first so a genuine
    acceleration (100k → 120k → 180k) isn't confused with noise
    (100k → 101k).
-4. **Phase 9/10 — Hardening + deployment.** Dockerfile, CI, secrets
+4. **Hardening + deployment (next numbered phase, exact number TBD).**
+   Dockerfile, CI, secrets
    management, a Postgres-backed `HistoryStore` (docs/HISTORY_SCHEMA.md),
    and the deployment target itself are all blocked on a product-owner
    decision (see milestone reports) — and, separately, on getting this

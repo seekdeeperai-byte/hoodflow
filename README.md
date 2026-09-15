@@ -11,13 +11,16 @@ explicit limitations. See `docs/` for the full picture; start with
 
 ## Status
 
-Through Phase 8: research, monorepo foundation, provider layer (GoPlus /
+Through Phase 9: research, monorepo foundation, provider layer (GoPlus /
 DexScreener / Blockscout), the core intelligence pipeline (analyzers →
 signals → relationships → evidence → interpretation → market state),
 identity resolution (Phase 5), historical intelligence + temporal
-relationships (Phase 6), and a Next.js frontend (Phase 8) presenting all
-of it. No social/news/hype provider, no persistence beyond in-memory
-history yet. See `docs/ROADMAP.md` for what's next and why.
+relationships (Phase 6), a Next.js frontend (Phase 8, QA'd in a real
+browser in Phase 8.1), and a live-data provider audit (Phase 9) that
+re-confirmed GoPlus and DexScreener against fresh live traffic and closed
+two provider test-coverage gaps. No social/news/hype provider, no
+deployer/wallet intelligence, no persistence beyond in-memory history yet.
+See `docs/ROADMAP.md` for what's next and why.
 
 ## Layout
 
@@ -34,7 +37,7 @@ docs/                  Architecture, data sources, scoring, security, roadmap
 ```bash
 pnpm install
 pnpm -r run build
-pnpm test              # 192 tests, all fixture-backed (see docs/ARCHITECTURE.md §2)
+pnpm test              # 194 tests, all fixture-backed (see docs/ARCHITECTURE.md §2)
 cp apps/api/.env.example apps/api/.env   # optional: GOPLUS_API_KEY / BLOCKSCOUT_API_KEY
 pnpm --filter @hoodflow/api run start    # after build, or `run dev` for tsx watch mode
 curl http://localhost:8787/healthz
@@ -45,14 +48,20 @@ pnpm --filter @hoodflow/web run dev      # http://localhost:3000
 ```
 
 **Important:** this was built and tested inside a sandbox whose outbound
-network access is policy-restricted to package registries only (no live
-calls to GoPlus/DexScreener/Blockscout were possible from here — see
-`docs/ARCHITECTURE.md` §2). All 44 tests run against realistic fixtures.
-The first time this runs somewhere with normal internet access, treat the
-live provider responses as unverified until you've confirmed they match
-what the zod schemas in `packages/providers/src/*/schema.ts` expect —
-especially GoPlus's chain-4663 support and DexScreener's Robinhood Chain
-slug, both flagged unverified in `docs/DATA_SOURCES.md`.
+network access is policy-restricted to package registries only — the
+provider clients' own HTTP calls (Node `fetch`, and plain `curl`) still
+cannot reach GoPlus/DexScreener/Blockscout from here (see
+`docs/ARCHITECTURE.md` §2). All 194 tests run against realistic fixtures,
+not live traffic. That said, GoPlus and DexScreener's real API *shape* has
+been confirmed live and current — most recently re-confirmed in Phase 9
+(2026-09-15) — using a separate, policy-trusted fetch path available only
+to this session; the repo's own provider client code has still never
+executed against live traffic from inside this sandbox. Blockscout remains
+fully blocked, including via that trusted path (a WAF/bot-protection 403,
+distinct from the sandbox's own egress block). See
+`docs/LIVE_VERIFICATION.md` for the full picture and
+`scripts/verify-live-providers.ts` for the reproducible way to close this
+gap from an environment with normal outbound network access.
 
 ## Data integrity, in one sentence
 

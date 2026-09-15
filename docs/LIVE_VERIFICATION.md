@@ -186,3 +186,60 @@ our own error classification that this exercise surfaced and fixed.
 3. Resolve the GME identity question against the official registry before
    using it in anything user-facing.
 4. DexScreener testnet (46630) slug — not checked.
+
+## Phase 9 re-verification (2026-09-15)
+
+Phase 9's mandate was a live-data provider audit, so this session
+re-ran (not assumed) the checks above rather than trusting this document's
+Phase 4 findings at face value.
+
+**Sandbox network block re-confirmed, same category as every prior
+phase.** `curl -sS "$HTTPS_PROXY/__agentproxy/status"` showed
+`recentRelayFailures` with `"kind": "connect_rejected", "detail": "gateway
+answered 403 to CONNECT (policy denial or upstream failure)"` for
+`api.gopluslabs.io`, `api.dexscreener.com`, and
+`robinhoodchain.blockscout.com` specifically — a policy-level block at the
+CONNECT-tunnel layer, not a provider-side rejection. `registry.npmjs.org`
+was used as a control and returned HTTP 200 normally, confirming the block
+is host-specific (egress allowlist), not a total network outage. Running
+`scripts/verify-live-providers.ts` (real `GoPlusClient`/
+`DexScreenerClient`/`BlockscoutClient`, no mocks) against this sandbox's
+network reproduced clean `PROVIDER_UNAVAILABLE` results for all three, as
+expected and as in Phase 4 — this remains the correct, honest outcome for
+a genuinely blocked transport, not a bug.
+
+**GoPlus and DexScreener re-confirmed live and current via `WebFetch`.**
+The same policy-trusted fetch path from Phase 4 was re-used, not assumed
+still valid. GoPlus returned a fresh response for the same USDG token on
+chain 4663 with `holder_count: 350833` — up from Phase 4's `341809` — which
+is itself the useful proof-point: this is live, moving, current data, not
+a cached or replayed result. DexScreener's `robinhood` slug likewise
+returned fresh, valid pair data on the same shape Phase 4 documented. This
+re-confirms every claim in this document's "GoPlus" and "DexScreener"
+sections still holds nine days later. Blockscout was re-attempted via
+`WebFetch` and failed with the same distinct WAF/bot-protection 403
+documented above (not the sandbox's egress-policy 403) — still BLOCKED,
+still not evidence the API itself is broken or unsupported.
+
+**What Phase 9 did NOT do, and why.** This session did not attempt to
+route `packages/providers`' own `fetchJson`/client code through `WebFetch`
+to make it "work" from here. `WebFetch` is a separate, first-party tool
+with its own transport — not something `packages/providers/src/http.ts`
+can call into without inventing a new transport mechanism inside
+production code, which Phase 9's own hard rules explicitly forbid ("do not
+invent provider modules"). So the gap this document has flagged since
+Phase 4 — whether `GoPlusClient`/`DexScreenerClient`/`BlockscoutClient`'s
+own code executes correctly against live traffic — is still open. Only an
+environment with real outbound network access (not this sandbox, and not
+achievable by creatively repurposing `WebFetch`) can close it, via
+`pnpm run verify:live`.
+
+**Net effect on this phase's confidence:** GoPlus and DexScreener's
+provider *contracts* (endpoint shape, field names, chain/slug support) are
+about as verified as they can be without running the repo's own code
+against live traffic — confirmed twice, nine days apart, with data that
+visibly changed between the two checks. Blockscout's contract remains
+DOCS-ONLY, unchanged from Phase 4. No provider became "live" inside
+`apps/api`/`apps/web` this phase; that requires the repo's own client code
+to run somewhere with real egress, which this sandbox still cannot
+provide.

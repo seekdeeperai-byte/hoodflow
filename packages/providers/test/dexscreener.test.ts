@@ -53,4 +53,16 @@ describe("DexScreenerClient", () => {
     const result = await client.getTokenLiquidity("robinhoodchain", ADDRESS);
     expect(result.state).toBe(DataState.RATE_LIMITED);
   });
+
+  // Phase 9 audit: every other client (GoPlus) already had a schema-validation-failure
+  // test, but this branch of DexScreenerClient — real production code, not test-only —
+  // had no coverage of its own. `pairs` present but the wrong type fails the client's
+  // `z.union([array, {pairs}])` response schema entirely (unlike a merely-empty/absent
+  // `pairs`, which is the already-covered DATA_UNAVAILABLE case above).
+  it("returns ERROR on a response that fails schema validation", async () => {
+    const client = new DexScreenerClient({ fetchImpl: mockFetchOnce(200, { pairs: "not-an-array" }) });
+    const result = await client.getTokenLiquidity("robinhoodchain", ADDRESS);
+    expect(result.state).toBe(DataState.ERROR);
+    expect(result.data).toBeUndefined();
+  });
 });
