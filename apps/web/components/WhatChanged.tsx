@@ -56,10 +56,25 @@ export function WhatChanged({ report }: { report: HoodflowReport }) {
         return (
           <div className={styles.row} key={delta.metric}>
             <span className={styles.label}>{p.label}</span>
-            <span className={`${styles.value} ${styles[directionClassKey] ?? ""}`} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span aria-hidden="true">{DIRECTION_ARROW[p.direction]}</span>
-              {p.changeText ?? p.unavailableReason}
-            </span>
+            {p.changeText !== null ? (
+              <span
+                className={`${styles.value} ${styles[directionClassKey] ?? ""}`}
+                style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}
+              >
+                <span aria-hidden="true">{DIRECTION_ARROW[p.direction]}</span>
+                {p.changeText}
+              </span>
+            ) : (
+              // A full backend-authored sentence, not a short tabular value — rendered as
+              // normal inline prose (the icon is just its leading character) so it wraps
+              // like a sentence instead of centering oddly against a multi-line block, and
+              // reads as text rather than as a broken numeric/code value. See ui.module.css's
+              // .valueReason comment — found in real-browser QA, not a stylistic change.
+              <span className={styles.valueReason}>
+                <span aria-hidden="true">{DIRECTION_ARROW[p.direction]} </span>
+                {p.unavailableReason}
+              </span>
+            )}
           </div>
         );
       })}

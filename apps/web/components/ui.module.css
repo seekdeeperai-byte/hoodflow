@@ -86,6 +86,12 @@
 .label {
   color: var(--text-dim);
   font-size: 13px;
+  /* Found in real-browser QA: without this, a long value (a full contract
+     address, a long sentence) squeezes the label itself into wrapping
+     ("Contract address" breaking into "Contract" / "address") on narrow
+     viewports. The label is always short and known ahead of time, so it
+     never needs to shrink — the value is what should wrap. */
+  flex-shrink: 0;
 }
 
 .value {
@@ -93,6 +99,11 @@
   font-variant-numeric: tabular-nums;
   font-size: 13px;
   color: var(--text);
+  /* Lets the value take the remaining row width and wrap/break inside it
+     instead of overflowing past the label — a flex item's default
+     min-width is "auto" (its content's intrinsic width), which is what
+     caused the squeeze above. */
+  min-width: 0;
 }
 
 .deltaUp {
@@ -106,7 +117,20 @@
 }
 .deltaUnavailable {
   color: var(--unavailable);
-  font-style: italic;
+}
+
+/* For a full, backend-authored explanatory sentence (e.g. a MetricDelta's
+   UNAVAILABLE/INSUFFICIENT_HISTORY reason) shown where a short tabular
+   .value would normally go. Found in real-browser QA: reusing .value's
+   monospace styling for a full sentence read as broken/code-like, not as
+   prose, and wrapped badly on narrow viewports. Proportional font,
+   readable line length, no italic. */
+.valueReason {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--unavailable);
+  text-align: left;
 }
 
 .evidenceList {

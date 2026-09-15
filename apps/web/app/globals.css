@@ -14,7 +14,10 @@
   --border-strong: #34363f;
   --text: #e9eaee;
   --text-dim: #9a9ca8;
-  --text-faint: #64666f;
+  /* Raised from #64666f (~3.3:1 on --surface) to meet WCAG AA (4.5:1) for
+     normal-size text — confirmed too low to read comfortably in real
+     browser QA (Phase 8.1), not a stylistic change. */
+  --text-faint: #83858f;
   --accent: #5b8cff;
   --accent-dim: #34406b;
   --positive: #34c77b;
@@ -23,7 +26,12 @@
   --negative-dim: #351b1c;
   --neutral: #b98a3d;
   --neutral-dim: #2f2513;
-  --unavailable: #6b6d78;
+  /* Raised from #6b6d78 (~3.6:1 on --surface) to meet WCAG AA — this is the
+     "DATA UNAVAILABLE" / "PROVIDER UNAVAILABLE" badge text color, so low
+     contrast here directly undermines the product's own data-integrity
+     requirement that an unavailable state must be clearly legible, not
+     visually suppressed. See docs/FRONTEND.md. */
+  --unavailable: #84868f;
   --font-sans: -apple-system, "Segoe UI", ui-sans-serif, system-ui, Roboto, Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Consolas", monospace;
   --radius: 8px;
@@ -45,7 +53,14 @@
     --border-strong: #c7cad1;
     --text: #14151a;
     --text-dim: #55575f;
-    --text-faint: #8a8c94;
+    /* Darkened from #8a8c94 (~3.1:1 on --bg) to meet WCAG AA — same
+       real-browser-QA finding as the dark-mode value above. */
+    --text-faint: #6d6f78;
+    /* Light mode's --unavailable already passed AA (~5.1:1) with the base
+       #6b6d78 value shared from :root; pin it explicitly here so raising
+       the dark-mode value above doesn't also (wrongly) lighten light mode,
+       which would fail contrast in the other direction. */
+    --unavailable: #6b6d78;
   }
 }
 
