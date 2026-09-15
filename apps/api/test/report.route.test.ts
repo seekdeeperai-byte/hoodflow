@@ -238,4 +238,84 @@ describe("GET /v1/report/:chainId/:address", () => {
 
     await app.close();
   });
+
+  it("Phase 6: first scan reports history.status INSUFFICIENT_HISTORY; second scan exposes real comparisons/trends/relationships through the report/API", async () => {
+    let liquidityUsd = 100_000;
+    let holderCount = 500;
+    let top10Pct = 55;
+    const deps = {
+      goplus: { getTokenSecurity: async () => fakeResult(DataState.DATA_UNAVAILABLE) } as unknown as GoPlusClient,
+      dexscreener: {
+        getTokenLiquidity: async () => fakeResult(DataState.AVAILABLE, { liquidityUsd }),
+      } as unknown as DexScreenerClient,
+      blockscout: {
+        getHolderSummary: async () => fakeResult(DataState.AVAILABLE, { holderCount, top10Pct }),
+      } as unknown as BlockscoutClient,
+    };
+    const historyStore = new InMemoryHistoryStore();
+    const app = await buildApp(config, deps, historyStore);
+
+    const first = await app.inject({ method: "GET", url: `/v1/report/4663/${ADDRESS}` });
+    const firstBody = first.json();
+    expect(firstBody.history.status).toBe("INSUFFICIENT_HISTORY");
+    expect(firstBody.history.observationsUsed).toBe(1);
+    expect(firstBody.history.relationships).toEqual([]);
+    expect(firstBody.limitations.join(" ")).toMatch(/historical comparison is unavailable/i);
+
+    // Liquidity + holders up, concentration down -> the canonical broad-based-growth case.
+    liquidityUsd = 200_000; // +100%
+    holderCount = 750; // +50%
+    top10Pct = 35; // -20pp
+
+    const second = await app.inject({ method: "GET", url: `/v1/report/4663/${ADDRESS}` });
+    const secondBody = second.json();
+    expect(secondBody.history.status).toBe("COMPARABLE");
+    expect(secondBody.history.observationsUsed).toBe(2);
+
+    const liquidityDelta = secondBody.history.comparisons.find((c: { metric: string }) => c.metric === "liquidityUsd");
+    expect(liquidityDelta.status).toBe("INCREASED");
+    expect(liquidityDelta.previousValue).toBe(100_000);
+    expect(liquidityDelta.currentValue).toBe(200_000);
+    expect(liquidityDelta.percentChange).toBeCloseTo(100, 5);
+
+    const concentrationDelta = secondBody.history.comparisons.find((c: { metric: string }) => c.metric === "top10Pct");
+    expect(concentrationDelta.percentagePointChange).toBeCloseTo(-20, 5);
+    expect(concentrationDelta.percentChange).toBeNull();
+
+    expect(secondBody.history.relationships.some((r: { relationshipType: string }) => r.relationshipType === "BROAD_BASED_LIQUIDITY_GROWTH")).toBe(true);
+    expect(secondBody.signals.some((s: { signalType: string }) => s.signalType === "LIQUIDITY_GROWTH")).toBe(true);
+    expect(secondBody.signals.some((s: { signalType: string }) => s.signalType === "HOLDER_CONCENTRATION_DECREASE")).toBe(true);
+
+    // Historical intelligence must never move the deterministic market pipeline.
+    expect(secondBody.score.dataQualityScore).toBe(firstBody.score.dataQualityScore);
+
+    await app.close();
+  });
+
+  it("Phase 6: a provider going from AVAILABLE to unavailable between scans reports history status UNAVAILABLE for that metric, never a fabricated '-100%' delta", async () => {
+    let liquidityState = DataState.AVAILABLE;
+    const deps = {
+      goplus: { getTokenSecurity: async () => fakeResult(DataState.DATA_UNAVAILABLE) } as unknown as GoPlusClient,
+      dexscreener: {
+        getTokenLiquidity: async () => (liquidityState === DataState.AVAILABLE ? fakeResult(DataState.AVAILABLE, { liquidityUsd: 100_000 }) : fakeResult(DataState.PROVIDER_UNAVAILABLE)),
+      } as unknown as DexScreenerClient,
+      blockscout: { getHolderSummary: async () => fakeResult(DataState.DATA_UNAVAILABLE) } as unknown as BlockscoutClient,
+    };
+    const historyStore = new InMemoryHistoryStore();
+    const app = await buildApp(config, deps, historyStore);
+
+    await app.inject({ method: "GET", url: `/v1/report/4663/${ADDRESS}` });
+    liquidityState = DataState.PROVIDER_UNAVAILABLE;
+    const second = await app.inject({ method: "GET", url: `/v1/report/4663/${ADDRESS}` });
+    const body = second.json();
+
+    const liquidityDelta = body.history.comparisons.find((c: { metric: string }) => c.metric === "liquidityUsd");
+    expect(liquidityDelta.status).toBe("UNAVAILABLE");
+    expect(liquidityDelta.percentChange).toBeNull();
+    expect(liquidityDelta.currentValue).toBeNull();
+    expect(liquidityDelta.previousValue).toBe(100_000);
+    expect(body.signals.some((s: { signalType: string }) => s.signalType === "LIQUIDITY_DECLINE")).toBe(false);
+
+    await app.close();
+  });
 });

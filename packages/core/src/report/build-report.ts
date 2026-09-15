@@ -4,11 +4,14 @@ import { analyzeHolders } from "../analyzers/holders-analyzer.js";
 import { analyzeIdentity } from "../analyzers/identity-analyzer.js";
 import { DataState, isUsable } from "../types/data-state.js";
 import { IdentityStatus } from "../types/identity.js";
+import { HistoryStatus } from "../types/history.js";
 import type { TokenSnapshot } from "../types/domain.js";
 import { buildEvidence } from "../evidence/evidence-engine.js";
 import { buildContractInterpretation, buildInterpretations } from "../interpretation/interpretation-engine.js";
 import { selectMarketState } from "../interpretation/market-state.js";
 import { detectRelationships } from "../relationships/relationship-engine.js";
+import { buildHistoricalComparison } from "../historical/build-history.js";
+import { buildHistoricalSignals } from "../historical/historical-signals.js";
 import { Confidence, HypeState, type HoodflowReport, type Signal } from "../types/intelligence.js";
 import { assessFreshness } from "../freshness.js";
 
@@ -26,8 +29,15 @@ function dataQualityScore(snapshot: TokenSnapshot): number {
  * the function the API route calls; it never talks to providers directly.
  */
 export interface BuildReportOptions {
-  /** When set, the holders analyzer can compute HOLDER_GROWTH against this prior count (see docs/HISTORY_SCHEMA.md). */
-  previousHolderCount?: number;
+  /**
+   * The most recent prior scan of this exact token (chain + normalized
+   * address), when one exists — from HistoryStore.getPreviousSnapshot(),
+   * passed through unchanged. Supersedes the Phase 0-5 `previousHolderCount`
+   * option (removed this phase): holder growth is now derived from this
+   * same snapshot internally, so callers have one previous-state input
+   * instead of two. See docs/HISTORICAL_INTELLIGENCE.md.
+   */
+  previousSnapshot?: TokenSnapshot;
   servedAt?: string;
 }
 
@@ -35,6 +45,7 @@ export function buildReport(snapshot: TokenSnapshot, options: BuildReportOptions
   const servedAt = options.servedAt ?? new Date().toISOString();
   const signals: Signal[] = [];
   const limitations: string[] = [];
+  const previousHolderCount = options.previousSnapshot?.holders.data?.holderCount;
 
   if (isUsable(snapshot.contract.state) && snapshot.contract.data) {
     signals.push(...analyzeContract(snapshot.contract.data, snapshot.capturedAt));
@@ -49,22 +60,24 @@ export function buildReport(snapshot: TokenSnapshot, options: BuildReportOptions
   }
 
   if (isUsable(snapshot.holders.state) && snapshot.holders.data) {
-    signals.push(...analyzeHolders(snapshot.holders.data, options.previousHolderCount, snapshot.capturedAt));
-    if (options.previousHolderCount === undefined) {
+    signals.push(...analyzeHolders(snapshot.holders.data, previousHolderCount, snapshot.capturedAt));
+    if (previousHolderCount === undefined) {
       limitations.push(
-        "Holder growth is unavailable — no prior snapshot exists to compare against yet (see docs/HISTORY_SCHEMA.md). This is not the same as holder growth being flat; it is simply unmeasured.",
+        "Holder growth is unavailable — no prior snapshot exists to compare against yet (see docs/HISTORICAL_INTELLIGENCE.md). This is not the same as holder growth being flat; it is simply unmeasured.",
       );
     }
   } else {
     limitations.push(`Holder distribution data unavailable (${snapshot.holders.state}).`);
   }
 
-  // Captured here, BEFORE identity limitations are considered below: the existing
-  // overallConfidencePenalty semantics (Phase 0-4) are driven only by
-  // contract/liquidity/holders availability, and Phase 5 must not silently change
-  // that — identity is informational, never a score/confidence-penalty input
-  // (Phase 5 §5: "Identity information must not automatically become a score
-  // component"). See docs/IDENTITY_RESOLUTION.md "Score integrity".
+  // Captured here, BEFORE identity or historical limitations are considered below: the
+  // existing overallConfidencePenalty semantics (Phase 0-4) are driven only by
+  // contract/liquidity/holders availability, and neither Phase 5 (identity) nor Phase 6
+  // (history) may silently change that — both are informational, never a
+  // score/confidence-penalty input (Phase 5 §5: "Identity information must not
+  // automatically become a score component"; Phase 6 §24: "Absence of history is not
+  // evidence of risk"). See docs/IDENTITY_RESOLUTION.md and
+  // docs/HISTORICAL_INTELLIGENCE.md, both "Score integrity".
   const marketLimitationsCount = limitations.length;
 
   // Relationships/evidence/market-state are computed from market signals ONLY
@@ -106,6 +119,18 @@ export function buildReport(snapshot: TokenSnapshot, options: BuildReportOptions
       break; // no limitation — this is the fully-resolved case
   }
 
+  // Phase 6: historical comparison against the single immediately-previous scan of this
+  // exact token, when one exists. Pure/no I/O (packages/core/src/historical/). Its signals
+  // are appended AFTER the market sweep above, same placement/reasoning as identity
+  // signals: informational, never an input to marketState or dataQualityScore.
+  const history = buildHistoricalComparison(snapshot, options.previousSnapshot);
+  signals.push(...buildHistoricalSignals(history.comparisons, snapshot.capturedAt));
+  if (history.status === HistoryStatus.INSUFFICIENT_HISTORY) {
+    limitations.push(
+      "Historical comparison is unavailable — no prior scan exists yet for this token (see docs/HISTORICAL_INTELLIGENCE.md). This is not evidence of stability or risk; it is simply unmeasured.",
+    );
+  }
+
   return {
     token: snapshot.token,
     generatedAt: snapshot.capturedAt,
@@ -128,10 +153,10 @@ export function buildReport(snapshot: TokenSnapshot, options: BuildReportOptions
       overallConfidencePenalty:
         marketLimitationsCount >= 2 ? Confidence.LOW : marketLimitationsCount === 1 ? Confidence.MEDIUM : null,
     },
+    history,
     limitations: [
       ...limitations,
-      "Social and news intelligence are not yet implemented (Phase 6) — social/news fields are always DATA_UNAVAILABLE in this build.",
-      "Liquidity signals in this build are single-snapshot ratios (market cap/volume vs. liquidity), not growth-over-time; historical intelligence (Phase 4) will add trend-based liquidity signals once repeated scans accumulate.",
+      "Social and news intelligence are not yet implemented — see docs/ROADMAP.md. social/news fields are always DATA_UNAVAILABLE in this build.",
     ],
   } satisfies HoodflowReport;
 }

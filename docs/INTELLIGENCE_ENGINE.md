@@ -10,6 +10,8 @@ TokenSnapshot (normalized provider data, per-domain DataState, + resolved identi
   -> buildInterpretations() + buildContractInterpretation()   Interpretation[]
   -> selectMarketState()                          { state, confidence }
   -> analyzeIdentity()                            Signal[]           (appended after the above — see docs/IDENTITY_RESOLUTION.md)
+  -> buildHistoricalComparison()                  HistoricalComparison  (Phase 6 — see docs/HISTORICAL_INTELLIGENCE.md)
+  -> buildHistoricalSignals()                     Signal[]           (appended after the above, same reasoning as identity)
   -> buildReport()                                HoodflowReport
 ```
 
@@ -18,7 +20,10 @@ array *after* relationships/evidence/marketState are computed from the
 market-only signal set — this is deliberate, not an oversight: identity
 risk (Phase 5) is conceptually separate from contract/market risk and must
 never influence `marketState` or `score.dataQualityScore`. See
-docs/IDENTITY_RESOLUTION.md "Score integrity."
+docs/IDENTITY_RESOLUTION.md "Score integrity." Historical signals
+(`source: "historical"`, Phase 6) follow the exact same placement and the
+exact same reasoning — see docs/HISTORICAL_INTELLIGENCE.md "Score
+integrity."
 
 Entry point: `packages/core/src/report/build-report.ts::buildReport`. It is
 a pure function — no I/O, no network, no randomness — so it's trivially
@@ -82,6 +87,17 @@ for the exact priority order. The one invariant worth calling out here:
 of the function, not a fallthrough at the end, so "guess a state from
 nothing" isn't reachable by construction.
 
+## Historical Intelligence (Phase 6)
+
+Two-point (previous-scan vs. current-scan) comparison, trend
+classification, and a small set of cross-metric temporal relationships —
+see docs/HISTORICAL_INTELLIGENCE.md for the full design. Deliberately not
+a general time-series/charting feature: wallet-cluster/deployer-history
+analyzers and true multi-point rate-of-change ("NOW → 1H → 6H → 24H → 7D")
+remain unbuilt (see "What isn't built yet" below) — `HistoryStore`'s
+`getScansSince` is already the right primitive for that later, once a
+minimum-sample-size policy exists to keep it meaningful rather than noise.
+
 ## What isn't built yet
 
 - Holder-trend / wallet-cluster / deployer-history analyzers (need the data
@@ -91,7 +107,11 @@ nothing" isn't reachable by construction.
   — typed in `packages/core/src/types/intelligence.ts` where reasonable,
   not implemented. `HoodflowReport.hype`/`.social`/`.news` are always
   `UNKNOWN`/`DATA_UNAVAILABLE` in this build, truthfully.
-- Historical/time-series intelligence (NOW → 1H → 6H → 24H → 7D) — needs
-  the HistoryStore (Phase 4) wired to a real datastore; the liquidity
-  analyzer's ratio-based signals are the interim substitute (see
-  docs/SCORING.md).
+- Multi-point rate/velocity intelligence (e.g. "liquidity growth is
+  accelerating") — Phase 6 explicitly deferred this: the two-point
+  comparison it built is meaningful on its own, and bolting on a
+  velocity/acceleration metric without a real minimum-sample-size policy
+  would risk presenting noise ("100k → 101k") as a meaningful trend. See
+  docs/HISTORICAL_INTELLIGENCE.md "Why two-point comparison only."
+- A Postgres-backed `HistoryStore` (still the in-memory implementation
+  from Phase 4 — see docs/HISTORY_SCHEMA.md).

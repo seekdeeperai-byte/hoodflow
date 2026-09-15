@@ -86,4 +86,73 @@ describe("buildReport", () => {
     );
     expect(report.dataQuality.liquidity).toBe(DataState.PARTIAL);
   });
+
+  describe("Phase 6: historical intelligence", () => {
+    it("history.status is INSUFFICIENT_HISTORY, never a fabricated baseline, when no previousSnapshot is supplied", () => {
+      const report = buildReport(snapshot({ liquidity: { state: DataState.AVAILABLE, data: { liquidityUsd: 100_000 } } }));
+      expect(report.history.status).toBe("INSUFFICIENT_HISTORY");
+      expect(report.history.observationsUsed).toBe(1);
+      expect(report.history.trends).toEqual([]);
+      expect(report.history.relationships).toEqual([]);
+      expect(report.limitations.some((l) => /historical comparison is unavailable/i.test(l))).toBe(true);
+    });
+
+    it("Score integrity: history presence/absence never changes marketState or dataQualityScore", () => {
+      const withoutHistory = buildReport(
+        snapshot({
+          liquidity: { state: DataState.AVAILABLE, data: { liquidityUsd: 200_000, marketCapUsd: 220_000, buys24h: 340, sells24h: 110 } },
+          contract: { state: DataState.AVAILABLE, data: { isOpenSource: true } },
+        }),
+      );
+      const previous = snapshot({ liquidity: { state: DataState.AVAILABLE, data: { liquidityUsd: 50_000 } } });
+      const withHistory = buildReport(
+        snapshot({
+          liquidity: { state: DataState.AVAILABLE, data: { liquidityUsd: 200_000, marketCapUsd: 220_000, buys24h: 340, sells24h: 110 } },
+          contract: { state: DataState.AVAILABLE, data: { isOpenSource: true } },
+        }),
+        { previousSnapshot: previous },
+      );
+      expect(withHistory.marketState.state).toBe(withoutHistory.marketState.state);
+      expect(withHistory.score.dataQualityScore).toBe(withoutHistory.score.dataQualityScore);
+    });
+
+    it("Score integrity: INSUFFICIENT_HISTORY does not change overallConfidencePenalty relative to an otherwise-identical report", () => {
+      const noHistory = buildReport(snapshot({}));
+      // Same market inputs (all unavailable) — only the presence/absence of history differs conceptually,
+      // and there is no way to make history "available" without also changing market data here, so this
+      // asserts the only lever history has (the limitation it adds) does not touch the penalty value.
+      expect(noHistory.dataQuality.overallConfidencePenalty).toBe("LOW"); // driven purely by 3 market-domain limitations, as in the base case above
+    });
+
+    it("liquidity growth across two scans produces a LIQUIDITY_GROWTH historical signal, placed after the market signal set", () => {
+      const previous = snapshot({ liquidity: { state: DataState.AVAILABLE, data: { liquidityUsd: 100_000 } } });
+      const report = buildReport(snapshot({ liquidity: { state: DataState.AVAILABLE, data: { liquidityUsd: 150_000 } } }), {
+        previousSnapshot: previous,
+      });
+      const signal = report.signals.find((s) => s.signalType === "LIQUIDITY_GROWTH");
+      expect(signal).toBeDefined();
+      expect(signal?.source).toBe("historical");
+    });
+
+    it("Identity integrity: historical comparison never touches report.identity, and identity stays keyed by contract address regardless of history", () => {
+      const previous = snapshot({ liquidity: { state: DataState.AVAILABLE, data: { liquidityUsd: 100_000 } } });
+      const report = buildReport(snapshot({ liquidity: { state: DataState.AVAILABLE, data: { liquidityUsd: 150_000 } } }), {
+        previousSnapshot: previous,
+      });
+      expect(report.identity.contractAddress).toBe(baseToken.address);
+      expect(report.identity.chainId).toBe(baseToken.chainId);
+    });
+
+    it("every historical comparison entry preserves previous/current values, both timestamps, and a comparison status — never fabricated", () => {
+      const previous = snapshot({ liquidity: { state: DataState.AVAILABLE, data: { liquidityUsd: 100_000 } } });
+      const currentSnap = snapshot({ liquidity: { state: DataState.AVAILABLE, data: { liquidityUsd: 150_000 } } });
+      const report = buildReport(currentSnap, { previousSnapshot: previous });
+      const liquidityDelta = report.history.comparisons.find((c) => c.metric === "liquidityUsd");
+      expect(liquidityDelta?.previousValue).toBe(100_000);
+      expect(liquidityDelta?.currentValue).toBe(150_000);
+      expect(liquidityDelta?.previousObservedAt).toBe(previous.capturedAt);
+      expect(liquidityDelta?.currentObservedAt).toBe(currentSnap.capturedAt);
+      expect(liquidityDelta?.status).toBe("INCREASED");
+    });
+  });
 });

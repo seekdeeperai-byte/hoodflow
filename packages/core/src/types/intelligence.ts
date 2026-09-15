@@ -34,6 +34,19 @@ export const SignalType = {
   BUY_SELL_IMBALANCE: "BUY_SELL_IMBALANCE",
   PRICE_MOMENTUM: "PRICE_MOMENTUM",
 
+  // Historical (Phase 6) — see packages/core/src/historical/historical-signals.ts.
+  // Appended to the report's signals array AFTER the market Relationship/Evidence/
+  // marketState sweep, same placement as identity signals: informational, never an
+  // input to marketState or score.dataQualityScore (docs/HISTORICAL_INTELLIGENCE.md).
+  // LIQUIDITY_GROWTH/LIQUIDITY_DECLINE above were typed since Phase 0 for exactly this
+  // ("activate once the HistoryStore has at least two snapshots") and are activated —
+  // not newly added — this phase. HOLDER_GROWTH above is likewise reused as-is
+  // (analyzers/holders-analyzer.ts, unchanged). Only the two concentration-trend types
+  // below are genuinely new: TOP10_CONCENTRATION/TOP20_CONCENTRATION already cover "how
+  // concentrated right now"; nothing covered "is concentration changing" before Phase 6.
+  HOLDER_CONCENTRATION_INCREASE: "HOLDER_CONCENTRATION_INCREASE",
+  HOLDER_CONCENTRATION_DECREASE: "HOLDER_CONCENTRATION_DECREASE",
+
   // Identity (Phase 5) — see packages/core/src/analyzers/identity-analyzer.ts.
   // Deliberately kept out of detectRelationships()/buildEvidence()'s market-signal
   // contradiction sweep: identity risk is conceptually separate from contract/market
@@ -169,5 +182,15 @@ export interface HoodflowReport {
   social: { state: import("./data-state.js").DataState };
   news: { state: import("./data-state.js").DataState };
   dataQuality: DataQuality;
+  /**
+   * "What changed since the last observation?" (Phase 6) — deltas, trends,
+   * and temporal relationships built from this scan plus, at most, the
+   * single immediately-previous scan of this exact token (chain +
+   * normalized address) via the existing HistoryStore. `status` is
+   * INSUFFICIENT_HISTORY, never a fabricated baseline, when no previous
+   * scan exists yet. Informational: never an input to `score.dataQualityScore`
+   * or `marketState` (docs/HISTORICAL_INTELLIGENCE.md "Score integrity").
+   */
+  history: import("./history.js").HistoricalComparison;
   limitations: string[];
 }

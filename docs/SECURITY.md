@@ -1,8 +1,68 @@
 # HOODFLOW — Security
 
-Status as of this build (Phase 0–5). This is a living document — update it
+Status as of this build (Phase 0–6). This is a living document — update it
 every time a new attack surface (new provider, new route, LLM integration,
 DB) is added.
+
+## Phase 6 recheck (2026-09-15)
+
+Re-audited specifically against what changed this phase: the new
+`packages/core/src/historical/` modules (`delta-engine.ts`,
+`trend-engine.ts`, `temporal-relationship-engine.ts`,
+`historical-signals.ts`, `build-history.ts`), the new `history` field on
+`HoodflowReport`, and the `BuildReportOptions.previousSnapshot` wiring in
+`report/build-report.ts` and `apps/api/src/routes/report.ts`. Full detail
+in docs/HISTORICAL_INTELLIGENCE.md's own "Security review" section —
+summarized here:
+
+- **No new I/O surface.** Every new module is pure computation over
+  already-fetched, already-validated `TokenSnapshot` data (current +, at
+  most, one previous snapshot from the unchanged `HistoryStore`) — none
+  construct a URL, open a socket, or touch the filesystem.
+- **NaN/Infinity/negative values handled explicitly, not by luck.**
+  `delta-engine.ts::usableValue()` requires `Number.isFinite`; a negative
+  value on either side of a comparison (physically impossible for
+  liquidity/holder-count/concentration) produces `NOT_COMPARABLE` rather
+  than a misleading delta. Division by zero (`previousValue === 0` for an
+  amount metric) is handled explicitly with `percentChange: null`, never
+  `Infinity`/`NaN`. Both are regression-tested
+  (`packages/core/test/delta-engine.test.ts`).
+- **No new unbounded-memory surface.** The new `historical/*` modules hold
+  no state between calls — every function is stateless. `HistoryStore`'s
+  existing, already-documented cap (`MAX_SCANS_PER_TOKEN = 1000`; no cap
+  on distinct-token count, a known Phase 4 gap) is unchanged — Phase 6
+  adds no new store, cache, or `Map`.
+  Duplicate-timestamp and future-timestamp scans were checked explicitly
+  (`packages/core/test/build-history.test.ts`) — neither crashes or
+  produces `NaN`/`Infinity`; `HistoryStore` itself still doesn't validate
+  timestamp ordering (Phase 4 behavior, unchanged — out of scope for Phase
+  6, since nothing in the new engines assumes strictly-increasing
+  timestamps beyond what `getPreviousSnapshot`'s own logic already
+  guarantees).
+- **No O(n²) or unbounded-complexity path.** `computeComparisons` iterates
+  a fixed 4-metric list; `computeTrends`/`detectTemporalRelationships` are
+  linear in that same small, bounded input — nothing scales with total
+  history depth. The route's `HistoryStore.getPreviousSnapshot` call is
+  O(scans-for-this-token), already bounded by the Phase 4 per-token cap,
+  never `O(all historical observations)`.
+- **No new log/secret-leakage path.** None of the new modules log
+  anything; the route's existing log line (`{chainId, addressPrefix}`) is
+  unchanged. Evidence/interpretation strings are built from
+  already-validated numeric fields via template literals — the same
+  pattern used everywhere else since Phase 0.
+- **Score integrity double-checked by test, not just asserted** — same
+  discipline as the Phase 5 near-miss below. `marketLimitationsCount` is
+  captured before any identity *or* historical limitation is pushed;
+  historical signals are appended to `signals` only after
+  `detectRelationships`/`buildEvidence`/`selectMarketState` have already
+  run. `build-report.test.ts`'s "Score integrity" describe block asserts
+  by test that an otherwise-identical report with and without a
+  `previousSnapshot` produces identical `marketState.state` and
+  `score.dataQualityScore`.
+- **Dependency audit re-run:** unchanged — zero vulnerabilities in
+  production dependencies, same 6 dev-only advisories
+  (`vitest`/`vite`/`@vitest/mocker`) as every prior phase. No new
+  dependencies were added this phase.
 
 ## Phase 5 recheck (2026-09-15)
 

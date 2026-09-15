@@ -36,16 +36,34 @@ signal, because these are binary capabilities, not degrees.
 | `BUY_SELL_IMBALANCE` | buy share deviates ≥15pp from 50% (MEDIUM), ≥30pp (HIGH); requires ≥10 total txns to avoid noise on thin samples |
 | `PRICE_MOMENTUM` | |24h price change| ≥ 15% (MEDIUM), ≥ 50% (HIGH) |
 
-**Why ratios, not growth-over-time, in this build:** a single DexScreener
-call is one point in time. The product spec's canonical example ("MC +74%,
-Volume +112%, Liquidity +6%") is a *rate-of-change* comparison, which needs
-two snapshots. The ratio-based signals here (mc/liquidity, volume/liquidity)
-are a legitimate, defensible single-snapshot proxy for the same underlying
-concern — "is activity outrunning depth" — and they activate on the very
-first scan of a token. True growth-rate signals (`LIQUIDITY_GROWTH`,
-`LIQUIDITY_DECLINE`) are typed in `packages/core/src/types/intelligence.ts`
-already but not implemented — they need the HistoryStore (Phase 4) to have
-at least two captures for the same token.
+**Why ratios, not growth-over-time, for the signals below:** a single
+DexScreener call is one point in time. The product spec's canonical
+example ("MC +74%, Volume +112%, Liquidity +6%") is a *rate-of-change*
+comparison, which needs two snapshots. The ratio-based signals here
+(mc/liquidity, volume/liquidity) are a legitimate, defensible
+single-snapshot proxy for the same underlying concern — "is activity
+outrunning depth" — and they activate on the very first scan of a token.
+True growth-rate signals (`LIQUIDITY_GROWTH`, `LIQUIDITY_DECLINE`) *are*
+now implemented (Phase 6, `packages/core/src/historical/historical-signals.ts`)
+once a second scan exists for the same token — see the historical delta/
+trend thresholds below and docs/HISTORICAL_INTELLIGENCE.md.
+
+## Historical delta/trend thresholds (Phase 6, `packages/core/src/historical/`)
+
+Same "reasonable starting point, not calibrated" posture as every other
+threshold on this page. Full rationale in docs/HISTORICAL_INTELLIGENCE.md.
+
+| Comparison | Noise threshold ("UNCHANGED" below this) | Signal strength tiers |
+|---|---|---|
+| Liquidity delta (amount, %) | 1% of previous value (reused exactly from HOLDER_GROWTH) | HIGH ≥20%, MEDIUM ≥5% |
+| Holder count delta (amount, %) | 1% of previous value | n/a — HOLDER_GROWTH signal unchanged from Phase 0-5 |
+| Concentration delta (percentage points) | 1 percentage point | HIGH ≥10pp, MEDIUM ≥3pp |
+
+Every historical delta's `confidence` is `MEDIUM`, never `HIGH` — a single
+prior-scan comparison, not a smoothed trend, same rationale as
+HOLDER_GROWTH. Temporal relationships (cross-metric combinations) are also
+always `MEDIUM`, including the three-way cases — multiple metrics agreeing
+at the same two timestamps isn't multiple independent samples.
 
 ## Confidence
 

@@ -1,6 +1,6 @@
 # HOODFLOW — Architecture
 
-Status: Phase 0–5. Last updated 2026-09-15.
+Status: Phase 0–6. Last updated 2026-09-15.
 
 ## 1. Discovery findings (Phase 0)
 
@@ -106,6 +106,7 @@ Signal Engine                              [core/signals]
 Relationship Engine                        [core/relationships]
 Evidence Engine                            [core/evidence]
 Interpretation Engine (template-based)     [core/interpretation]
+Historical Intelligence (Phase 6)          [core/historical]  (reads HistoryStore, Phase 4)
 HOODFLOW Report                            [core/report]
    -> Fastify route GET /v1/report/:chainId/:address
 ```
@@ -119,11 +120,25 @@ Evidence Engine's market-signal contradiction sweep and from
 `marketState`/`score.dataQualityScore` — identity risk is informational and
 conceptually separate from contract/market risk.
 
-Wallet-cluster/deployer-history analyzers, the social/news/hype layers, and
-full historical time-series intelligence (beyond the minimal `HistoryStore`
-built in Phase 4 and reused as-is for identity in Phase 5) are architected
-for (types exist in `core/types`) but not yet implemented — see
-`docs/ROADMAP.md`.
+Historical intelligence (Phase 6, docs/HISTORICAL_INTELLIGENCE.md) sits
+alongside identity, after the market pipeline: it compares the current
+snapshot against the single most recent prior scan of the same token (via
+the unchanged, Phase-4 `HistoryStore`) to produce deltas, trends, and a
+small set of cross-metric temporal relationships, exposed as
+`HoodflowReport.history`. Its own signals (`source: "historical"`) follow
+the exact same placement/exclusion as identity signals — informational,
+never an input to `marketState`/`score.dataQualityScore`. It has its own,
+separate, small Temporal Relationship Engine
+(`core/historical/temporal-relationship-engine.ts`) rather than extending
+`core/relationships/relationship-engine.ts`, because it combines
+cross-snapshot Trends, not same-snapshot Signals — a structurally
+different input.
+
+Wallet-cluster/deployer-history analyzers and the social/news/hype layers
+are architected for (types exist in `core/types`) but not yet
+implemented — see `docs/ROADMAP.md`. A Postgres-backed `HistoryStore`
+(replacing the Phase 4 in-memory implementation, still used as-is by
+Phase 6) is also not yet built.
 
 ## 5. Data integrity rules enforced in code
 

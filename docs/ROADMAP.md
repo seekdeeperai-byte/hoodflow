@@ -2,14 +2,18 @@
 
 Status snapshot: 2026-09-15. Phases below are working-order guesses at the
 dependency graph, adjusted from the product spec's suggested order where
-research showed a better sequence, and — as of Phase 5 — adjusted again
-based on the actual state of the codebase rather than followed mechanically
-(the user's own explicit instruction each phase: decide the next
-highest-value step from what's actually built, not from a fixed list). The
-phase *numbers* below reflect what was actually built in each numbered
-phase, which has diverged from this doc's original Phase 0-3 guesses —
-this file is corrected in place rather than left stale, per the "living
-document" convention used throughout docs/.
+research showed a better sequence, and — as of Phase 5, and again as of
+Phase 6 — adjusted again based on the actual state of the codebase rather
+than followed mechanically (the user's own explicit instruction each
+phase: decide the next highest-value step from what's actually built, not
+from a fixed list). The phase *numbers* below reflect what was actually
+built in each numbered phase, which has diverged from this doc's original
+Phase 0-3 guesses — this file is corrected in place rather than left
+stale, per the "living document" convention used throughout docs/. Most
+recent renumbering: Phase 6 turned out to be historical intelligence (not
+social/news/hype, this doc's earlier guess) — social/news/hype, the
+frontend, and hardening/deployment have each shifted down one number
+accordingly.
 
 ## Done (this build)
 
@@ -33,6 +37,13 @@ document" convention used throughout docs/.
       pipeline, deterministic contract-beats-symbol matching, the real
       GME naming-collision case study made a permanent regression fixture.
       See docs/IDENTITY_RESOLUTION.md.
+- [x] Phase 6 — Historical intelligence + temporal relationships: two-point
+      (previous-scan vs. current-scan) delta engine, trend classification,
+      a small set of cross-metric temporal relationships (liquidity/
+      holders/concentration), historical signals/evidence, all exposed via
+      `HoodflowReport.history`. Reused the existing Phase 4 `HistoryStore`
+      unchanged; proved by test that score/marketState are unaffected by
+      history's presence or absence. See docs/HISTORICAL_INTELLIGENCE.md.
 
 ## Next up
 
@@ -42,26 +53,35 @@ document" convention used throughout docs/.
    deployments" before attempting full wallet-cluster analysis. Also
    blocked, same as Blockscout holder data, on Blockscout's live wire
    shape remaining unverified (docs/LIVE_VERIFICATION.md).
-2. **Phase 6 — Social + news + hype.** Every social source realistically
+2. **Phase 7 — Social + news + hype.** Every social source realistically
    needs either a paid API tier or an account-owner decision (X API access
    tier, Reddit API app registration, a licensed news feed) — see "needs
    product-owner input" in the milestone reports. The Hype Engine and
    social/on-chain relationship types are already typed in
    `packages/core/src/types/intelligence.ts` so this is additive, not a
-   redesign. (This phase was originally numbered "Phase 5" in this doc's
-   Phase 0-3 draft; Phase 5 was reassigned to identity resolution based on
-   the actual codebase state — see the note at the top of this file.)
-3. **Phase 7 — Frontend ("What HOODFLOW Sees").** Not started. Needs a
+   redesign. (This phase was originally numbered "Phase 5", then "Phase 6",
+   in this doc's earlier drafts; those numbers were reassigned to identity
+   resolution and historical intelligence respectively, based on the
+   actual codebase state each phase — see the note at the top of this
+   file.)
+3. **Multi-point rate/velocity intelligence.** Phase 6 explicitly deferred
+   this (see docs/HISTORICAL_INTELLIGENCE.md "Why two-point comparison
+   only") — `HistoryStore.getScansSince` is already the right primitive,
+   but it needs a real minimum-sample-size policy first so a genuine
+   acceleration (100k → 120k → 180k) isn't confused with noise
+   (100k → 101k).
+4. **Phase 8 — Frontend ("What HOODFLOW Sees").** Not started. Needs a
    decision on framework (Next.js is the default per the spec) and,
-   separately, a decision on where this deploys. The new `identity` block
-   in `HoodflowReport` (Phase 5) is what this frontend would surface to
-   answer "what token am I looking at" before showing any risk/market
-   content.
-4. **Phase 8/9 — Hardening + deployment.** Dockerfile, CI, secrets
-   management, and the deployment target itself are all blocked on a
-   product-owner decision (see milestone reports) — and, separately, on
-   getting this codebase pushed to a durable remote at all (still sandbox-
-   only as of Phase 5 — see docs/IDENTITY_RESOLUTION.md's parent report).
+   separately, a decision on where this deploys. The `identity` block
+   (Phase 5) and the `history` block (Phase 6) in `HoodflowReport` are what
+   this frontend would surface first — "what token am I looking at" and
+   "what changed" — before showing any risk/market content.
+5. **Phase 9/10 — Hardening + deployment.** Dockerfile, CI, secrets
+   management, a Postgres-backed `HistoryStore` (docs/HISTORY_SCHEMA.md),
+   and the deployment target itself are all blocked on a product-owner
+   decision (see milestone reports) — and, separately, on getting this
+   codebase pushed to a durable remote at all (still sandbox-only as of
+   Phase 6 — see docs/HISTORICAL_INTELLIGENCE.md's parent report).
 
 ## Explicitly deferred (typed but not built)
 

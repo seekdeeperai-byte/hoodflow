@@ -1,10 +1,15 @@
 # HOODFLOW — Historical Persistence: Schema & Design
 
-Status: interface + in-memory implementation built this phase (Phase 4);
-a real Postgres implementation is Phase 4.5/5, deliberately deferred until
-a deployment target/DB decision is made (see the Phase 4 report's
-"needs product-owner input"). This doc is written so that decision is a
-schema-mapping exercise, not a design exercise.
+Status: interface + in-memory implementation built in Phase 4, reused
+as-is (unchanged) by both Phase 5 (identity) and Phase 6 (historical
+comparison/trends/temporal relationships — see
+docs/HISTORICAL_INTELLIGENCE.md). A real Postgres implementation remains
+deliberately deferred until a deployment target/DB decision is made (see
+the Phase 4 report's "needs product-owner input") — Phase 6 confirmed the
+existing interface (`recordScan`, `getPreviousSnapshot`, `getScansSince`)
+is already sufficient for real, working delta/trend/temporal-relationship
+intelligence and did not need to change it. This doc is written so that
+decision is a schema-mapping exercise, not a design exercise.
 
 ## Design goal (from the product spec)
 
@@ -132,3 +137,15 @@ fine for proving the mechanism works, not fine for production; swapping in
 a Postgres-backed implementation of the same interface is the entire
 migration (`apps/api/src/server.ts` is the only place that constructs a
 `HistoryStore` — see that file's comment).
+
+## What Phase 6 built on top of this (code, not schema changes)
+
+`packages/core/src/historical/` (`delta-engine.ts`, `trend-engine.ts`,
+`temporal-relationship-engine.ts`, `historical-signals.ts`,
+`build-history.ts`) reads exactly one `getPreviousSnapshot` result per
+report and computes deltas/trends/temporal relationships from it — see
+docs/HISTORICAL_INTELLIGENCE.md for the full design. None of this required
+a schema or interface change here: the existing `ScanRecord{snapshot,
+report}` shape already carries everything the delta engine needs
+(`snapshot.liquidity.data.liquidityUsd`, `snapshot.holders.data.holderCount/
+top10Pct/top20Pct`, plus each domain's `DataState` and `snapshot.capturedAt`).

@@ -34,12 +34,12 @@ export function registerReportRoute(app: FastifyInstance, deps: PipelineDeps, hi
     const snapshot = await fetchSnapshot(deps, chainId, address);
 
     // Historical comparison: look up the most recent prior scan for this exact token
-    // (see docs/HISTORY_SCHEMA.md). Never fabricated — if there isn't one, buildReport
-    // is told nothing to compare against and HOLDER_GROWTH simply doesn't appear.
+    // (see docs/HISTORICAL_INTELLIGENCE.md). Never fabricated — if there isn't one,
+    // buildReport is told nothing to compare against and HOLDER_GROWTH/history.status
+    // simply reflect that (INSUFFICIENT_HISTORY), never a manufactured baseline.
     const previous = await historyStore.getPreviousSnapshot(snapshot.token, snapshot.capturedAt);
-    const previousHolderCount = previous?.snapshot.holders.data?.holderCount;
 
-    const report = buildReport(snapshot, { previousHolderCount });
+    const report = buildReport(snapshot, { previousSnapshot: previous?.snapshot });
     await historyStore.recordScan({ snapshot, report });
 
     return reply.status(200).send(report);
