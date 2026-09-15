@@ -243,3 +243,105 @@ DOCS-ONLY, unchanged from Phase 4. No provider became "live" inside
 `apps/api`/`apps/web` this phase; that requires the repo's own client code
 to run somewhere with real egress, which this sandbox still cannot
 provide.
+
+## Phase 10 re-verification (2026-09-15) — status tags below
+
+Phase 10's explicit mandate was to move from "sandbox-blocked" to "the
+repo's own provider client actually executes against real traffic." This
+session tested that directly rather than assuming Phase 9's finding still
+held.
+
+**Status tag legend** (used consistently from this point on in this doc
+and in docs/DATA_SOURCES.md): `LIVE VERIFIED` (the repo's own client code
+executed successfully against the real provider), `LIVE UNVERIFIED` (the
+API contract is believed correct from docs/prior partial evidence, but the
+repo's own client has not executed against it), `SANDBOX BLOCKED` (this
+environment's own egress policy rejects the connection at the CONNECT
+layer, before it reaches the provider), `WAF BLOCKED` (the provider's own
+host actively rejects the request — a different failure mode from a
+sandbox policy block), `NOT CONFIGURED` (no credential is set — not a
+failure, since the provider supports unauthenticated access), `NOT
+IMPLEMENTED` (no client exists at all).
+
+- **GoPlus: LIVE UNVERIFIED, SANDBOX BLOCKED for the repo's own client.**
+  `scripts/verify-live-providers.ts` was re-run this phase using the real
+  `GoPlusClient` against chain 4663/USDG. Result: HTTP 403,
+  `PROVIDER_UNAVAILABLE`, `"GoPlus returned HTTP 403 (blocked, not a data
+  rejection)."` The proxy's own status endpoint
+  (`$HTTPS_PROXY/__agentproxy/status`) recorded this as
+  `"kind": "connect_rejected", "detail": "gateway answered 403 to CONNECT
+  (policy denial or upstream failure)"` for `api.gopluslabs.io:443` —
+  confirming this is this sandbox's own egress policy, not a GoPlus-side
+  rejection, the same category of block as every phase since Phase 0.
+  `GOPLUS_API_KEY` is `NOT CONFIGURED` in this environment; not needed for
+  this test since GoPlus supports unauthenticated access.
+- **DexScreener: same conclusion, same evidence pattern.** Real
+  `DexScreenerClient` against the `"robinhood"` slug: HTTP 403,
+  `PROVIDER_UNAVAILABLE`, proxy log shows the identical `connect_rejected`
+  policy block for `api.dexscreener.com:443`.
+  `SANDBOX BLOCKED` for the repo's own client; `LIVE UNVERIFIED` overall.
+- **Blockscout: unchanged, `SANDBOX BLOCKED` (this environment) and
+  separately `WAF BLOCKED` (the provider's own host, confirmed again via
+  WebFetch this phase — see below).** `BLOCKSCOUT_API_KEY` `NOT
+  CONFIGURED`.
+- **RPC: `NOT IMPLEMENTED`.** No RPC client exists anywhere in this repo.
+  Phase 10 was explicitly instructed not to build one, and didn't.
+
+**A methodology finding worth recording plainly.** This phase re-ran the
+same `WebFetch`-based supplementary check used in Phase 4/9 (GoPlus and
+DexScreener only — Blockscout again failed with the same WAF 403).
+GoPlus's `holder_count` came back as `341809` — the exact Phase 4 figure,
+**not** the `350833` figure Phase 9's own write-up reported as a fresh,
+grown value nine days later. This is a real discrepancy this session
+cannot fully resolve: it may mean the underlying value genuinely
+fluctuated back down, or — more likely, given `WebFetch`'s own tool
+description states results "may be summarized" by an intermediate model
+rather than returned as exact raw bytes — that one of the two captured
+numbers (most plausibly the Phase 9 "350833") was a summarization
+artifact rather than a literal field value. Either way, this is exactly
+why Phase 10's own hard rule treats a successful `curl`/`WebFetch` outside
+the repository as **not sufficient** evidence of live-provider
+correctness, and why this document has never claimed `WebFetch` results
+as equivalent to the repo's own client executing: only exact byte-for-byte
+JSON, or the repo's own zod-validated client, is treated as authoritative
+here. `docs/DATA_CONTRACT_AUDIT.md`'s "LIVE" tags for GoPlus fields should
+be read as "shape confirmed via a real response," not as "this exact
+numeric value is currently accurate."
+
+**Real end-to-end pipeline re-proof (all-providers-unavailable case),
+against a real running `apps/api` instance, same token:** scan 1 for
+USDG/chain 4663 returned `identity.status: CONFIRMED`,
+`dataQuality: {contract: PROVIDER_UNAVAILABLE, liquidity:
+PROVIDER_UNAVAILABLE, holders: PROVIDER_UNAVAILABLE}`,
+`marketState: INSUFFICIENT_DATA`, `score.dataQualityScore: 0`,
+`history.status: INSUFFICIENT_HISTORY`. A second scan of the same address
+returned `history.status: COMPARABLE`, `observationsUsed: 2`, with every
+`MetricDelta.status` correctly `UNAVAILABLE` (never a fabricated delta,
+since the same field was unavailable in both scans) and `trends: []`/
+`relationships: []` correctly empty. `marketState` and
+`score.dataQualityScore` were identical across both scans, confirming
+history's presence doesn't affect them. No fabricated data anywhere in
+either response.
+
+**GitHub remote status, checked this phase per Phase 10's Rule 2:** no
+`origin` remote is configured in this repository. `github.com` and
+`api.github.com` are reachable from this sandbox (unlike the three
+provider hosts — a genuinely different, non-egress-blocked network path),
+but no git credential helper is configured for `github.com` in this
+environment (`git ls-remote` against the intended remote failed with
+"could not read Username for 'https://github.com': terminal prompts
+disabled", and `git config --get credential.helper` returns nothing). A
+`GITHUB_TOKEN` environment variable is present but is not wired into any
+configured git credential mechanism for this repository, and per Phase
+10's explicit rule against inventing credential mechanisms, it was not
+used to construct one. **Conclusion: `AUTH_STATUS: NOT CONFIGURED`,
+`REMOTE_STATUS: NOT SET`.** No push was attempted.
+
+**Net effect on Phase 10:** the premise that this would be "a network-
+enabled environment" distinct from Phase 9's sandbox did not hold — the
+same policy-level CONNECT block applies to all three providers via the
+repo's own client code, confirmed with fresh proxy-log evidence, not
+assumed carried over from Phase 9. Phase 10's core success criteria 1 and
+2 (the repo's own GoPlus/DexScreener clients successfully reaching their
+providers) were not met in this environment. This is reported as a
+genuine finding, not worked around.

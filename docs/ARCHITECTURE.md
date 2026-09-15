@@ -1,6 +1,6 @@
 # HOODFLOW — Architecture
 
-Status: Phase 0–9. Last updated 2026-09-15 (Phase 9).
+Status: Phase 0–10. Last updated 2026-09-15 (Phase 10).
 
 ## 1. Discovery findings (Phase 0)
 
@@ -88,6 +88,17 @@ to close exactly this gap the moment that's possible. Nothing in this
 codebase silently substitutes fixture data for production traffic — the
 fixtures live only in `*/test/fixtures` and are wired only into test
 files.
+
+**Phase 10 explicitly re-tested this constraint rather than assuming it
+still held**, since that phase's premise was a "network-enabled
+environment." The same policy-level CONNECT block applies: the proxy's own
+status endpoint recorded `connect_rejected` for all three provider hosts
+during Phase 10's `scripts/verify-live-providers.ts` run, using the real
+client classes. `github.com`/`api.github.com`, by contrast, *are*
+reachable from this sandbox — a genuinely different, non-egress-blocked
+path — but no git credential helper is configured here, so pushing to a
+remote still isn't possible from this environment either. See
+docs/LIVE_VERIFICATION.md's Phase 10 section for the full evidence.
 
 ## 3. Why this stack
 

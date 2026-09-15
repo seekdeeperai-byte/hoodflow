@@ -11,16 +11,19 @@ explicit limitations. See `docs/` for the full picture; start with
 
 ## Status
 
-Through Phase 9: research, monorepo foundation, provider layer (GoPlus /
+Through Phase 10: research, monorepo foundation, provider layer (GoPlus /
 DexScreener / Blockscout), the core intelligence pipeline (analyzers →
 signals → relationships → evidence → interpretation → market state),
 identity resolution (Phase 5), historical intelligence + temporal
 relationships (Phase 6), a Next.js frontend (Phase 8, QA'd in a real
-browser in Phase 8.1), and a live-data provider audit (Phase 9) that
-re-confirmed GoPlus and DexScreener against fresh live traffic and closed
-two provider test-coverage gaps. No social/news/hype provider, no
-deployer/wallet intelligence, no persistence beyond in-memory history yet.
-See `docs/ROADMAP.md` for what's next and why.
+browser in Phase 8.1), a live-data provider audit (Phase 9), and a
+production-network verification attempt (Phase 10) that re-confirmed this
+sandbox still cannot reach any provider via the repo's own client code
+(same policy-level egress block since Phase 0) and re-proved the full
+report pipeline end-to-end with zero fabricated data. No social/news/hype
+provider, no deployer/wallet intelligence, no RPC client, no persistence
+beyond in-memory history yet. See `docs/ROADMAP.md` for what's next and
+why.
 
 ## Layout
 
@@ -51,14 +54,16 @@ pnpm --filter @hoodflow/web run dev      # http://localhost:3000
 network access is policy-restricted to package registries only — the
 provider clients' own HTTP calls (Node `fetch`, and plain `curl`) still
 cannot reach GoPlus/DexScreener/Blockscout from here (see
-`docs/ARCHITECTURE.md` §2). All 194 tests run against realistic fixtures,
-not live traffic. That said, GoPlus and DexScreener's real API *shape* has
-been confirmed live and current — most recently re-confirmed in Phase 9
-(2026-09-15) — using a separate, policy-trusted fetch path available only
-to this session; the repo's own provider client code has still never
-executed against live traffic from inside this sandbox. Blockscout remains
-fully blocked, including via that trusted path (a WAF/bot-protection 403,
-distinct from the sandbox's own egress block). See
+`docs/ARCHITECTURE.md` §2), re-confirmed as recently as Phase 10
+(2026-09-15) with fresh proxy-log evidence. All 194 tests run against
+realistic fixtures, not live traffic. GoPlus and DexScreener's real API
+*shape* has been confirmed via a separate, policy-trusted fetch path
+available only to this session (not the repo's own client code, and not
+sufficient proof on its own — Phase 10 found a real numeric discrepancy
+between two supposedly-live captures of the same field, most likely from
+that path's own response summarization, not the provider). Blockscout
+remains fully blocked, including via that trusted path (a WAF/bot-
+protection 403, distinct from the sandbox's own egress block). See
 `docs/LIVE_VERIFICATION.md` for the full picture and
 `scripts/verify-live-providers.ts` for the reproducible way to close this
 gap from an environment with normal outbound network access.

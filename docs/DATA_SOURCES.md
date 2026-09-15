@@ -2,11 +2,22 @@
 
 ## Implemented in this build
 
-| Domain | Provider | Endpoint | Auth | Status |
-|---|---|---|---|---|
-| Contract security | GoPlus Security Token Security API v1 | `GET api.gopluslabs.io/api/v1/token_security/{chain_id}?contract_addresses=...` | Optional Bearer token (higher limits) | Implemented; chain-4663 support live-confirmed (Phase 4, re-confirmed Phase 9 — see below). Repo's own client code still unexercised against live traffic from this sandbox. |
-| Liquidity / market | DexScreener | `GET api.dexscreener.com/token-pairs/v1/{chainSlug}/{address}` | None documented | Implemented; Robinhood Chain slug live-confirmed as `"robinhood"` (Phase 4 — see below). Repo's own client code still unexercised against live traffic from this sandbox. |
-| Holders | Blockscout REST API v2 (official Robinhood Chain explorer) | `GET {baseUrl}/api/v2/tokens/{address}` + `.../holders` | Optional Bearer token (5 rps free / 100k credits/day without) | Implemented; wire shape unverified against live traffic — every attempt (including the policy-trusted `WebFetch` path that worked for GoPlus/DexScreener) is blocked by the explorer's own WAF, not this sandbox's egress policy (see docs/LIVE_VERIFICATION.md). |
+Status tags (standardized as of Phase 10 — see docs/LIVE_VERIFICATION.md
+for the full legend and evidence): `LIVE VERIFIED` (the repo's own client
+executed successfully against the real provider), `LIVE UNVERIFIED` (API
+contract believed correct from docs/partial evidence, but the repo's own
+client has never executed against it), `SANDBOX BLOCKED` (this
+environment's egress policy rejects the connection, not the provider),
+`WAF BLOCKED` (the provider's own host rejects the request), `NOT
+CONFIGURED` (credential not set — not a failure if the provider supports
+unauthenticated access), `NOT IMPLEMENTED` (no client exists).
+
+| Domain | Provider | Endpoint | Auth | Credential | Status |
+|---|---|---|---|---|---|
+| Contract security | GoPlus Security Token Security API v1 | `GET api.gopluslabs.io/api/v1/token_security/{chain_id}?contract_addresses=...` | Optional Bearer token (higher limits) | `GOPLUS_API_KEY`: NOT CONFIGURED (not required at low volume) | Implemented; chain-4663 support confirmed via a non-repo fetch path (Phase 4, re-confirmed Phase 9/10). Repo's own `GoPlusClient` code: **LIVE UNVERIFIED, SANDBOX BLOCKED** — re-tested Phase 10, still rejected at the egress policy's CONNECT layer. |
+| Liquidity / market | DexScreener | `GET api.dexscreener.com/token-pairs/v1/{chainSlug}/{address}` | None documented | n/a | Implemented; Robinhood Chain slug confirmed as `"robinhood"` via a non-repo fetch path (Phase 4). Repo's own `DexScreenerClient` code: **LIVE UNVERIFIED, SANDBOX BLOCKED** — re-tested Phase 10, same result as GoPlus. |
+| Holders | Blockscout REST API v2 (official Robinhood Chain explorer) | `GET {baseUrl}/api/v2/tokens/{address}` + `.../holders` | Optional Bearer token (5 rps free / 100k credits/day without) | `BLOCKSCOUT_API_KEY`: NOT CONFIGURED | Implemented; wire shape unverified against live traffic. Repo's own `BlockscoutClient` code: **SANDBOX BLOCKED** (this environment) **and separately WAF BLOCKED** (the explorer's own bot protection rejects even the non-repo fetch path that works for GoPlus/DexScreener) — see docs/LIVE_VERIFICATION.md. |
+| RPC | none | — | — | — | **NOT IMPLEMENTED.** No RPC client exists anywhere in this repository. Explicitly out of scope to build in Phase 10 (and every phase before it); not a bug. |
 
 ## Not yet implemented (architected for, see docs/ROADMAP.md)
 

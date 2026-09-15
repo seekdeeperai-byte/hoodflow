@@ -78,6 +78,22 @@ again.
       `.../blockscout.test.ts`). No provider became live-reachable from
       this sandbox; no provider/core code changed. See
       docs/LIVE_VERIFICATION.md and docs/DATA_CONTRACT_AUDIT.md.
+- [x] Phase 10 — Production-network live provider verification attempt:
+      re-tested (not assumed) whether this execution environment could
+      reach GoPlus/DexScreener/Blockscout via the repo's own provider
+      client code. Confirmed, with fresh proxy-log evidence, the same
+      policy-level egress block as every prior phase since Phase 0 — this
+      was not the network-enabled environment the phase's own premise
+      expected. Re-proved the full pipeline end-to-end against a real
+      running API (two sequential scans, INSUFFICIENT_HISTORY →
+      COMPARABLE, zero fabricated data). Checked GitHub remote/auth status
+      per the phase's own rules: `github.com` is reachable from this
+      sandbox but no git credential helper is configured, so no remote was
+      added and nothing was pushed. Found and documented a real
+      discrepancy in the Phase 9 write-up's `WebFetch`-sourced GoPlus
+      holder-count figure — reinforcing why that supplementary check was
+      always correctly treated as non-authoritative. No provider/core code
+      changed. See docs/LIVE_VERIFICATION.md's Phase 10 section.
 
 ## Next up
 
@@ -111,10 +127,14 @@ again.
    management, a Postgres-backed `HistoryStore` (docs/HISTORY_SCHEMA.md),
    and the deployment target itself are all blocked on a product-owner
    decision (see milestone reports) — and, separately, on getting this
-   codebase pushed to a durable remote at all (still sandbox-only as of
-   Phase 8 — see docs/HISTORICAL_INTELLIGENCE.md's parent report). A
-   deployment target decision also now needs to cover `apps/web` (e.g. does
-   it deploy alongside `apps/api`, or separately with
+   codebase pushed to a durable remote at all (still sandbox-only through
+   Phase 10 — see docs/HISTORICAL_INTELLIGENCE.md's parent report and
+   docs/LIVE_VERIFICATION.md's Phase 10 section). Phase 10 confirmed
+   `github.com` itself is reachable from this sandbox but no git
+   credential helper is configured for it here — pushing needs either a
+   credential set up in this environment, or running from a machine that
+   already has one. A deployment target decision also now needs to cover
+   `apps/web` (e.g. does it deploy alongside `apps/api`, or separately with
    `HOODFLOW_API_BASE_URL` pointed at a deployed API) — see docs/FRONTEND.md.
 
 Phase 8 — Frontend ("What HOODFLOW Sees") moved to "Done" above; the
