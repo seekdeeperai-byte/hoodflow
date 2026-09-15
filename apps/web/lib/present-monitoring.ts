@@ -9,7 +9,7 @@ import type { HoodflowReport } from "@hoodflow/core";
  * never a forecast, never a probability, never "will."
  */
 export interface MonitoringItem {
-  kind: "signal" | "temporal" | "limitation";
+  kind: "signal" | "temporal" | "crossSource" | "limitation";
   text: string;
 }
 
@@ -26,6 +26,14 @@ const WATCH_TEMPORAL_TYPES = new Set([
   "LIQUIDITY_PARTICIPATION_DIVERGENCE",
 ]);
 
+/**
+ * Cross-source relationship types worth flagging (Final Intelligence
+ * Completion phase §6-7) — mirrors WATCH_TEMPORAL_TYPES' own "small,
+ * explicit allowlist of divergence patterns" convention, not "anything
+ * cross-source." See packages/core/src/types/cross-source.ts.
+ */
+const WATCH_CROSS_SOURCE_TYPES = new Set(["ONCHAIN_SOCIAL_DIVERGENCE", "ATTENTION_LIQUIDITY_DIVERGENCE", "MULTI_SOURCE_DIVERGENCE"]);
+
 export function deriveMonitoringItems(report: HoodflowReport): MonitoringItem[] {
   const items: MonitoringItem[] = [];
 
@@ -38,6 +46,12 @@ export function deriveMonitoringItems(report: HoodflowReport): MonitoringItem[] 
   for (const rel of report.history.relationships) {
     if (WATCH_TEMPORAL_TYPES.has(rel.relationshipType)) {
       items.push({ kind: "temporal", text: `Watch for: ${rel.interpretation}` });
+    }
+  }
+
+  for (const rel of report.crossSource.relationships) {
+    if (WATCH_CROSS_SOURCE_TYPES.has(rel.relationshipType)) {
+      items.push({ kind: "crossSource", text: `Watch for: ${rel.interpretation}` });
     }
   }
 

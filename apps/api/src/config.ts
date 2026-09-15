@@ -11,6 +11,8 @@ const EnvSchema = z.object({
   HOST: z.string().default("0.0.0.0"),
   GOPLUS_API_KEY: z.string().optional(),
   BLOCKSCOUT_API_KEY: z.string().optional(),
+  /** X (Twitter) API v2 bearer token — required for the social provider; unset means social intelligence returns PROVIDER_UNAVAILABLE (see docs/DATA_SOURCES.md). No credential is required for the news provider (GDELT). */
+  X_BEARER_TOKEN: z.string().optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(30),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),

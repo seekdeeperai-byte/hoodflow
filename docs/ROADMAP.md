@@ -1,6 +1,9 @@
 # HOODFLOW — Roadmap
 
-Status snapshot: 2026-09-15. Phases below are working-order guesses at the
+Status snapshot: 2026-09-15 (Final Intelligence Completion phase — the
+last planned development phase for this build; per that phase's own
+governing spec, this document is not being extended with a new future
+phase list here). Phases below are working-order guesses at the
 dependency graph, adjusted from the product spec's suggested order where
 research showed a better sequence, and — as of Phase 5, and again as of
 Phase 6 — adjusted again based on the actual state of the codebase rather
@@ -119,52 +122,90 @@ again.
       (`dist/server.js` / `next start`), not just the dev server. See
       docs/LIVE_VERIFICATION.md's Phase 11 section, docs/DATA_CONTRACT_AUDIT.md's
       Phase 11 addendum, and docs/SECURITY.md's Phase 11 recheck.
+- [x] Final Intelligence Completion phase — Social Intelligence (real X API
+      v2 client, `SocialObservation`/`SocialSummary`), News Intelligence
+      (real GDELT DOC 2.0 client, deterministic event classification,
+      syndicated-story de-duplication), Attention/Hype Intelligence (a
+      fully-exposed, documented formula over real social+news activity —
+      not a meme score, not a buy/sell signal), and Cross-Source
+      Intelligence (a third relationship engine combining on-chain +
+      historical + social + news + attention across 11 typed relationship
+      categories, non-causal language enforced, Temporal Cross-Source
+      Analysis requiring real timestamps or explicit
+      `INSUFFICIENT_TEMPORAL_DATA`), plus a final Integrated Interpretation
+      synthesis layer (what changed / do sources agree / where they
+      diverge / what to monitor — explicitly never a trade recommendation).
+      This is the item this doc's "Next up" list below previously called
+      "Phase 7 — Social + news + hype"; it's now done and folded in here
+      rather than left as a stale forward-looking entry. Fully additive:
+      every pre-existing type/engine/route/UI section unchanged in shape
+      and behavior (proved by the pre-existing 195 tests all still passing
+      unmodified, plus 82 new tests — 277 total). Entity resolution reuses
+      the exact contract-beats-symbol principle from Phase 5's identity
+      resolution; a hostile prompt-injection-style string was proven, by
+      test, to flow through the full pipeline as inert data. Both new
+      providers (GDELT, X) remain **SANDBOX BLOCKED** from this
+      environment, re-confirmed with the same rigor as every prior
+      provider — no relationship or signal was ever fabricated when real
+      social/news/attention data was genuinely unavailable end-to-end
+      against the real USDG token. See docs/SOCIAL_NEWS_INTELLIGENCE.md,
+      docs/HYPE_ATTENTION.md, docs/CROSS_SOURCE_INTELLIGENCE.md, and
+      docs/LIVE_VERIFICATION.md's Final Intelligence Completion section.
 
-## Next up
+## Remaining known limitations (not a future-phase plan)
 
-1. **Deployer/wallet intelligence.** Needs Blockscout's transaction/
-   internal-tx endpoints (1,000-record pagination cap per their docs) —
-   scope a first pass around "does this contract's creator have other
-   deployments" before attempting full wallet-cluster analysis. Also
-   blocked, same as Blockscout holder data, on Blockscout's live wire
-   shape remaining unverified (docs/LIVE_VERIFICATION.md). No deployer
-   analyzer or wallet-intelligence provider exists at all yet — confirmed
-   during the Phase 9 audit, not newly discovered.
-2. **Phase 7 — Social + news + hype.** Every social source realistically
-   needs either a paid API tier or an account-owner decision (X API access
-   tier, Reddit API app registration, a licensed news feed) — see "needs
-   product-owner input" in the milestone reports. The Hype Engine and
-   social/on-chain relationship types are already typed in
-   `packages/core/src/types/intelligence.ts` so this is additive, not a
-   redesign. (This phase was originally numbered "Phase 5", then "Phase 6",
-   in this doc's earlier drafts; those numbers were reassigned to identity
-   resolution and historical intelligence respectively, based on the
-   actual codebase state each phase — see the note at the top of this
-   file.)
-3. **Multi-point rate/velocity intelligence.** Phase 6 explicitly deferred
-   this (see docs/HISTORICAL_INTELLIGENCE.md "Why two-point comparison
-   only") — `HistoryStore.getScansSince` is already the right primitive,
-   but it needs a real minimum-sample-size policy first so a genuine
-   acceleration (100k → 120k → 180k) isn't confused with noise
-   (100k → 101k).
-4. **Hardening + deployment (next numbered phase, exact number TBD).**
-   Dockerfile, CI, secrets
-   management, a Postgres-backed `HistoryStore` (docs/HISTORY_SCHEMA.md),
-   and the deployment target itself are all blocked on a product-owner
-   decision (see milestone reports) — and, separately, on getting this
-   codebase pushed to a durable remote at all (still sandbox-only through
-   Phase 10 — see docs/HISTORICAL_INTELLIGENCE.md's parent report and
-   docs/LIVE_VERIFICATION.md's Phase 10 section). Phase 10 confirmed
-   `github.com` itself is reachable from this sandbox but no git
-   credential helper is configured for it here — pushing needs either a
-   credential set up in this environment, or running from a machine that
-   already has one. A deployment target decision also now needs to cover
-   `apps/web` (e.g. does it deploy alongside `apps/api`, or separately with
-   `HOODFLOW_API_BASE_URL` pointed at a deployed API) — see docs/FRONTEND.md.
+The Final Intelligence Completion phase was this build's last planned
+development phase (its own governing spec, §27, explicitly directs against
+proposing further phases here). The items below are honest, pre-existing
+gaps carried forward from earlier phases — operational/credential/
+infrastructure limitations, not unstarted product features that this
+build's scope ever covered:
 
-Phase 8 — Frontend ("What HOODFLOW Sees") moved to "Done" above; the
-`identity` (Phase 5) and `history` (Phase 6) blocks in `HoodflowReport` are
-what it surfaces first, exactly as anticipated here.
+- **Deployer/wallet intelligence.** Never implemented in any phase of this
+  build. Needs Blockscout's transaction/internal-tx endpoints
+  (1,000-record pagination cap per their docs) — a first pass would scope
+  around "does this contract's creator have other deployments" before
+  attempting full wallet-cluster analysis. Blocked, same as Blockscout
+  holder data, on Blockscout's live wire shape remaining unverified
+  (docs/LIVE_VERIFICATION.md).
+- **Multi-point rate/velocity intelligence.** Phase 6 explicitly deferred
+  this (see docs/HISTORICAL_INTELLIGENCE.md "Why two-point comparison
+  only") — `HistoryStore.getScansSince` is already the right primitive,
+  but it needs a real minimum-sample-size policy first so a genuine
+  acceleration (100k → 120k → 180k) isn't confused with noise
+  (100k → 101k). Not addressed this phase.
+- **Hardening + deployment.** Dockerfile, CI, secrets management, a
+  Postgres-backed `HistoryStore` (docs/HISTORY_SCHEMA.md), and the
+  deployment target itself remain blocked on a product-owner decision —
+  and, separately, on getting this codebase pushed to a durable remote at
+  all. Re-checked this phase with the same rigor as Phase 10/11: no git
+  credential mechanism is configured in this environment (see
+  docs/LIVE_VERIFICATION.md's Final Intelligence Completion section for
+  this phase's own confirmation). A deployment target decision also needs
+  to cover `apps/web` (e.g. does it deploy alongside `apps/api`, or
+  separately with `HOODFLOW_API_BASE_URL` pointed at a deployed API) — see
+  docs/FRONTEND.md.
+- **Live provider verification for GDELT/X.** Both clients are real,
+  tested against fixtures, and confirmed (via a fake-token wiring check for
+  X) to attempt real network calls correctly — but neither has executed
+  successfully against live traffic from any environment, since this
+  sandbox's egress block applies to them the same as every other provider.
+  `scripts/verify-live-providers.ts` now covers both and is the
+  reproducible way to close this gap from an environment with real egress
+  (and, for X, a funded Bearer token).
+- **Additional social/news sources** (Reddit, Telegram, a licensed news
+  feed) remain unimplemented — each needs its own account/app-registration
+  or licensing decision from whoever owns production credentials, exactly
+  as X did before this phase. Both `SocialObservation`/`NewsObservation`
+  are shaped so a second client can be added behind the same normalized
+  types without touching any downstream analyzer.
+
+Phase 8 — Frontend ("What HOODFLOW Sees") and the Final Intelligence
+Completion phase's four new sections are both in "Done" above; the
+`identity` (Phase 5), `history` (Phase 6), `social`/`news`/`hype`/
+`crossSource`/`integratedInterpretation` (Final Intelligence Completion
+phase) blocks in `HoodflowReport` are what they surface, exactly as
+anticipated at each phase.
 
 ## Explicitly deferred (typed but not built)
 

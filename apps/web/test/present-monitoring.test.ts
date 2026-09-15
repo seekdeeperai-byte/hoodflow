@@ -57,6 +57,31 @@ describe("deriveMonitoringItems", () => {
     expect(items).toEqual([{ kind: "temporal", text: "Watch for: Liquidity increased alongside rising concentration." }]);
   });
 
+  it("only flags cross-source relationships on the explicit watch-allowlist, not every relationship type (e.g. MULTI_SOURCE_CONVERGENCE is not flagged)", () => {
+    const report: HoodflowReport = {
+      ...DEMO_REPORT,
+      signals: [],
+      limitations: [],
+      history: { ...DEMO_REPORT.history, relationships: [] },
+      crossSource: {
+        ...DEMO_REPORT.crossSource,
+        relationships: [
+          {
+            relationshipType: "ATTENTION_LIQUIDITY_DIVERGENCE",
+            observedAt: "2026-01-01T00:00:00.000Z",
+            sourcesInvolved: ["ATTENTION", "ONCHAIN"],
+            evidence: [],
+            confidence: "MEDIUM",
+            interpretation: "Attention is elevated while liquidity is not growing in proportion.",
+            dataState: "AVAILABLE",
+          },
+        ],
+      },
+    };
+    const items = deriveMonitoringItems(report);
+    expect(items).toEqual([{ kind: "crossSource", text: "Watch for: Attention is elevated while liquidity is not growing in proportion." }]);
+  });
+
   it("surfaces every disclosed limitation as a 'Monitor' item", () => {
     const report: HoodflowReport = {
       ...DEMO_REPORT,

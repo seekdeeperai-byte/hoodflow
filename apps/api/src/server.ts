@@ -1,4 +1,4 @@
-import { GoPlusClient, DexScreenerClient, BlockscoutClient, getChainConfig } from "@hoodflow/providers";
+import { GoPlusClient, DexScreenerClient, BlockscoutClient, GdeltNewsClient, XSocialClient, getChainConfig } from "@hoodflow/providers";
 import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
 
@@ -14,8 +14,13 @@ async function main() {
     baseUrl: getChainConfig(4663)!.blockscoutBaseUrl,
     apiKey: config.BLOCKSCOUT_API_KEY,
   });
+  // News (GDELT) needs no credential and is always constructed. Social (X API v2) is
+  // constructed either way — passing no bearerToken is exactly what makes it return
+  // PROVIDER_UNAVAILABLE without a network call (see XSocialClient's own doc comment).
+  const news = new GdeltNewsClient();
+  const social = new XSocialClient({ bearerToken: config.X_BEARER_TOKEN });
 
-  const app = await buildApp(config, { goplus, dexscreener, blockscout, blockscoutChainId: 4663 });
+  const app = await buildApp(config, { goplus, dexscreener, blockscout, blockscoutChainId: 4663, social, news });
 
   await app.listen({ port: config.PORT, host: config.HOST });
 }

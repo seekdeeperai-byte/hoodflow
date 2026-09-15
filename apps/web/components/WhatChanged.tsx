@@ -21,6 +21,33 @@ const DIRECTION_CLASS: Record<string, string> = {
   unavailable: "deltaUnavailable",
 };
 
+/**
+ * Final Intelligence Completion phase (§15): "What Changed" becomes
+ * multi-dimensional — on-chain (unchanged, above) plus social/news/
+ * attention, sourced from `report.integratedInterpretation.whatChanged`
+ * (packages/core/src/interpretation/integrated-interpretation.ts), which
+ * already excludes any domain that had no real observation this scan. The
+ * "On-chain:" prefixed entries are filtered out here because the on-chain
+ * deltas above already render that exact information with real up/down
+ * arrows — this section adds only what the on-chain view can't show.
+ */
+function BeyondOnChain({ report }: { report: HoodflowReport }) {
+  const extra = report.integratedInterpretation.whatChanged.filter((w) => !w.startsWith("On-chain:"));
+  if (extra.length === 0) return null;
+  return (
+    <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
+      <div className={styles.muted} style={{ marginBottom: 6 }}>
+        Beyond on-chain
+      </div>
+      <ul className={styles.evidenceList}>
+        {extra.map((w, i) => (
+          <li key={i}>{w}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function WhatChanged({ report }: { report: HoodflowReport }) {
   const { history } = report;
 
@@ -33,6 +60,7 @@ export function WhatChanged({ report }: { report: HoodflowReport }) {
           </h2>
         </div>
         <DataUnavailable reason="This is the first recorded scan of this exact token — there is no prior observation to compare against yet. This is unmeasured, not unchanged, and not a negative finding." />
+        <BeyondOnChain report={report} />
       </section>
     );
   }
@@ -78,6 +106,8 @@ export function WhatChanged({ report }: { report: HoodflowReport }) {
           </div>
         );
       })}
+
+      <BeyondOnChain report={report} />
     </section>
   );
 }

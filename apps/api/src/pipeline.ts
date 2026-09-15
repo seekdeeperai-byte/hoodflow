@@ -4,14 +4,23 @@ import {
   isUsable,
   resolveIdentity,
   unavailable,
+  type NewsObservation,
   type ProviderObservedIdentity,
+  type SocialObservation,
   type TokenIdentity,
   type TokenSnapshot,
   type LiquiditySnapshot,
   type HolderSummary,
   type ProviderResult,
 } from "@hoodflow/core";
-import { getChainConfig, type BlockscoutClient, type DexScreenerClient, type GoPlusClient } from "@hoodflow/providers";
+import {
+  getChainConfig,
+  type BlockscoutClient,
+  type DexScreenerClient,
+  type GdeltNewsClient,
+  type GoPlusClient,
+  type XSocialClient,
+} from "@hoodflow/providers";
 
 export interface PipelineDeps {
   goplus: GoPlusClient;
@@ -32,6 +41,17 @@ export interface PipelineDeps {
    * DexScreener behind `dexScreenerSlugVerified`. See docs/DATA_SOURCES.md.
    */
   blockscoutChainId: number;
+  /**
+   * Social + News (Final Intelligence Completion phase). Optional —
+   * omitting either keeps every pre-existing caller of `fetchSnapshot`
+   * (including `apps/api/test/report.route.test.ts`'s mocks, which predate
+   * this phase) compiling and behaving exactly as before: an omitted client
+   * resolves to PROVIDER_UNAVAILABLE without any network call, the same
+   * "not configured" gating pattern already used for `blockscoutChainId`
+   * above and for `dexScreenerSlug` in `getChainConfig`.
+   */
+  social?: XSocialClient;
+  news?: GdeltNewsClient;
 }
 
 /**
@@ -94,6 +114,36 @@ export async function fetchSnapshot(deps: PipelineDeps, chainId: number, address
       ? { chainId, address: normalizedAddress, name: identity.match.name, symbol: identity.match.symbol }
       : { chainId, address: normalizedAddress };
 
+  // Final Intelligence Completion phase: social + news. Deliberately fetched AFTER identity
+  // resolution above (not in parallel with contract/liquidity/holders) because the query text
+  // is built from the resolved identity's official name/symbol when available — querying by a
+  // confirmed name/symbol is a materially better search than querying by a bare address, and
+  // getting this wrong risks a false entity match (§10: worse than no match at all).
+  const entityTarget = {
+    contractAddress: normalizedAddress,
+    officialName: identity.status === IdentityStatus.CONFIRMED ? identity.match?.name : undefined,
+    symbol: identity.status === IdentityStatus.CONFIRMED ? identity.match?.symbol : undefined,
+  };
+  const searchQuery = entityTarget.officialName ?? entityTarget.symbol ?? normalizedAddress;
+  const knownTokens = chain?.knownTokens ?? [];
+
+  // "This build/deployment never wired up a client at all" is DATA_UNAVAILABLE, matching the
+  // existing DexScreener-slug/Blockscout-chain "not configured for this build" convention
+  // above — distinct from PROVIDER_UNAVAILABLE, which XSocialClient itself already returns
+  // when a client exists but its credential (X_BEARER_TOKEN) is missing (see its own doc
+  // comment). The real server (server.ts) always constructs both clients, so this branch is
+  // primarily exercised by tests that construct PipelineDeps without them.
+  const socialPromise: Promise<ProviderResult<SocialObservation[]>> = deps.social
+    ? deps.social.searchRecentPosts(searchQuery, entityTarget, knownTokens)
+    : Promise.resolve(
+        unavailable<SocialObservation[]>("social", DataState.DATA_UNAVAILABLE, "Social provider is not configured in this build."),
+      );
+  const newsPromise: Promise<ProviderResult<NewsObservation[]>> = deps.news
+    ? deps.news.searchNews(searchQuery, entityTarget, knownTokens)
+    : Promise.resolve(unavailable<NewsObservation[]>("news", DataState.DATA_UNAVAILABLE, "News provider is not configured in this build."));
+
+  const [social, news] = await Promise.all([socialPromise, newsPromise]);
+
   return {
     token,
     capturedAt,
@@ -101,5 +151,7 @@ export async function fetchSnapshot(deps: PipelineDeps, chainId: number, address
     contract: { state: contract.state, data: contract.data, error: contract.error },
     liquidity: { state: liquidity.state, data: liquidity.data, error: liquidity.error },
     holders: { state: holders.state, data: holders.data, error: holders.error },
+    social: { state: social.state, data: social.data, error: social.error },
+    news: { state: news.state, data: news.data, error: news.error },
   };
 }

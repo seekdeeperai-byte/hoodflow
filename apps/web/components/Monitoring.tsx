@@ -6,12 +6,14 @@ import { deriveMonitoringItems } from "../lib/present-monitoring";
 const KIND_TONE: Record<string, BadgeTone> = {
   signal: "negative",
   temporal: "neutral",
+  crossSource: "accent",
   limitation: "unavailable",
 };
 
 const KIND_LABEL: Record<string, string> = {
   signal: "Signal",
   temporal: "Trend",
+  crossSource: "Cross-source",
   limitation: "Data gap",
 };
 

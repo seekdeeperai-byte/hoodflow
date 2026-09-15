@@ -18,6 +18,8 @@ unauthenticated access), `NOT IMPLEMENTED` (no client exists).
 | Liquidity / market | DexScreener | `GET api.dexscreener.com/token-pairs/v1/{chainSlug}/{address}` | None documented | n/a | Implemented; Robinhood Chain slug confirmed as `"robinhood"` via a non-repo fetch path (Phase 4). Repo's own `DexScreenerClient` code: **LIVE UNVERIFIED, SANDBOX BLOCKED** — re-tested Phase 10, same result as GoPlus. |
 | Holders | Blockscout REST API v2 (official Robinhood Chain explorer) | `GET {baseUrl}/api/v2/tokens/{address}` + `.../holders` | Optional Bearer token (5 rps free / 100k credits/day without) | `BLOCKSCOUT_API_KEY`: NOT CONFIGURED | Implemented; wire shape unverified against live traffic. Repo's own `BlockscoutClient` code: **SANDBOX BLOCKED** (this environment) **and separately WAF BLOCKED** (the explorer's own bot protection rejects even the non-repo fetch path that works for GoPlus/DexScreener) — see docs/LIVE_VERIFICATION.md. Only ever queried by `apps/api` for the chain it's actually configured for (chain 4663) — **Phase 11 fix**: previously called unconditionally for any registered chain, including testnet 46630, which could have misattributed mainnet holder data to a testnet report; now gated the same way DexScreener's slug is, see docs/DATA_CONTRACT_AUDIT.md. |
 | RPC | none | — | — | — | **NOT IMPLEMENTED.** No RPC client exists anywhere in this repository. Explicitly out of scope to build in Phase 10 (and every phase before it); not a bug. |
+| News | GDELT DOC 2.0 API (public, free, no key) | `GET api.gdeltproject.org/api/v2/doc/doc?query=...&mode=artlist&format=json` | None | n/a | Implemented this phase (`GdeltNewsClient`). Repo's own client code: **LIVE UNVERIFIED, SANDBOX BLOCKED** — re-tested this phase, `connect_rejected` at the egress proxy, same as every other provider. See docs/SOCIAL_NEWS_INTELLIGENCE.md. |
+| Social | X (Twitter) API v2 recent search | `GET api.twitter.com/2/tweets/search/recent?query=...` | Required Bearer token (no free tier under current X terms) | `X_BEARER_TOKEN`: **NOT CONFIGURED** | Implemented this phase (`XSocialClient`) — real client code that checks the credential *before* any network call and returns `PROVIDER_UNAVAILABLE` immediately when unset (never a fake/mocked response). With a fake token supplied for a wiring check, the client correctly attempted a real HTTPS call, which then hit the same **SANDBOX BLOCKED** result as every other provider — proving the client itself is correctly wired, not broken. See docs/SOCIAL_NEWS_INTELLIGENCE.md. |
 
 ## Not yet implemented (architected for, see docs/ROADMAP.md)
 
@@ -25,10 +27,34 @@ unauthenticated access), `NOT IMPLEMENTED` (no client exists).
   needs a transaction-graph data source; Blockscout's transaction/internal-tx
   endpoints are the likely starting point, capped at 1,000 records/query per
   their docs.
-- Social (X, Reddit, Telegram) — needs credentials/API access decisions from
-  the product owner (see the milestone report).
-- News/RSS — candidate sources not yet evaluated; needs a licensing/ToS
-  pass before implementation, per product spec §20.
+- Reddit / Telegram (additional social sources beyond X) — same
+  credentials/API-access-decision blocker as X, not attempted this phase
+  since X alone already satisfies §3's "at least one real social provider"
+  requirement and each additional source needs its own account/app
+  registration decision from whoever owns production credentials.
+- A second, licensed news feed alongside GDELT (e.g. NewsAPI.org) — GDELT
+  needed no product-owner decision to implement now; a paid feed can be
+  added later as a second client behind the same `NewsObservation` shape.
+
+## Entity Resolution
+
+Social/news observations are tied to a specific on-chain entity using the
+same "contract address beats symbol" principle as identity resolution
+(docs/IDENTITY_RESOLUTION.md) — contract address is the strongest anchor,
+a bare symbol match is never treated as confirmation on its own (tickers
+collide across chains/projects), and a false match is treated as strictly
+worse than a missing observation. Full detail, the match-basis hierarchy,
+and the regression test covering an ambiguous ticker:
+docs/SOCIAL_NEWS_INTELLIGENCE.md §Entity resolution.
+
+## Source Quality
+
+Every social/news observation carries a `SourceQuality`
+(`OFFICIAL | ESTABLISHED_PUBLISHER | PUBLIC_SOCIAL | UNKNOWN_SOURCE`), and
+syndicated news copies of the same story are grouped before being counted,
+so duplicate coverage of one real story is never presented as multiple
+independent confirmations. Full detail: docs/SOCIAL_NEWS_INTELLIGENCE.md
+§Source quality.
 
 ## Robinhood Chain specifics
 
@@ -78,3 +104,11 @@ unauthenticated access), `NOT IMPLEMENTED` (no client exists).
   light manual testing** — self-service, no cost, but it's a real-world
   account action the product owner should take (or explicitly delegate),
   not something invented here.
+- GDELT: no documented hard rate limit for the free DOC 2.0 API at low
+  volume; `GdeltNewsClient` caps each query at 50 records
+  (`maxrecords=50`) regardless.
+- X API v2: rate limits are tier-dependent under X's current terms and
+  weren't independently confirmed this phase (no live traffic reached the
+  endpoint from this sandbox); `XSocialClient` classifies HTTP 429 as
+  `RATE_LIMITED` and HTTP 401/403 as `PROVIDER_UNAVAILABLE` regardless of
+  the specific tier in effect.

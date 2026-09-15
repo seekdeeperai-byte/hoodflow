@@ -30,7 +30,9 @@ import { getChainConfig } from "@hoodflow/providers";
 import { GoPlusClient } from "@hoodflow/providers";
 import { DexScreenerClient } from "@hoodflow/providers";
 import { BlockscoutClient } from "@hoodflow/providers";
-import type { ProviderResult } from "@hoodflow/core";
+import { GdeltNewsClient } from "@hoodflow/providers";
+import { XSocialClient } from "@hoodflow/providers";
+import type { NewsObservation, ProviderResult, SocialObservation } from "@hoodflow/core";
 
 const chainId = Number(process.env.CHAIN_ID ?? 4663);
 const chain = getChainConfig(chainId);
@@ -186,12 +188,50 @@ async function main() {
     ),
   );
 
+  // Final Intelligence Completion phase: social + news. Query text mirrors
+  // apps/api/src/pipeline.ts's own logic (official name/symbol when known, else the
+  // address) — never a fabricated query.
+  const entityTarget = {
+    contractAddress: tokenAddress!.toLowerCase(),
+    officialName: knownToken?.name,
+    symbol: knownToken?.symbol,
+  };
+  const searchQuery = entityTarget.officialName ?? entityTarget.symbol ?? entityTarget.contractAddress;
+
+  const gdelt = new GdeltNewsClient();
+  const newsResult = await gdelt.searchNews(searchQuery, entityTarget, chain!.knownTokens);
+  printArrayReport<NewsObservation>(
+    "GDELT News (DOC 2.0 API)",
+    `GET https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(searchQuery)}&mode=artlist&maxrecords=50&format=json`,
+    newsResult,
+  );
+
+  const x = new XSocialClient({ bearerToken: process.env.X_BEARER_TOKEN });
+  const socialResult = await x.searchRecentPosts(searchQuery, entityTarget, chain!.knownTokens);
+  printArrayReport<SocialObservation>(
+    "X API v2 (recent search)",
+    `GET https://api.twitter.com/2/tweets/search/recent?query=${encodeURIComponent(searchQuery)}`,
+    socialResult,
+  );
+
   console.log("");
   console.log("=".repeat(72));
   console.log("Done. Paste this output into docs/LIVE_VERIFICATION.md's history, or attach it");
   console.log("to whatever tracks this phase's verification — do not hand-edit the DATA STATE");
   console.log("lines above; they came directly from the real client code's return values.");
   console.log("=".repeat(72));
+}
+
+function printArrayReport<T>(provider: string, request: string, result: ProviderResult<T[]>) {
+  console.log("");
+  console.log(`--- ${provider} ---`);
+  console.log(`REQUEST:              ${request}`);
+  console.log(`HTTP STATUS:          ${result.httpStatus ?? "(no response received)"}`);
+  console.log(`LATENCY:              ${result.latencyMs ?? "n/a"}${typeof result.latencyMs === "number" ? "ms" : ""}`);
+  console.log(`RESPONSE VALIDATION:  ${result.state === "ERROR" ? "FAILED — see error" : result.data ? "PASSED (zod schema)" : "N/A (no data)"}`);
+  console.log(`NORMALIZATION:        ${result.data ? `OK — ${result.data.length} observation(s) normalized` : "N/A"}`);
+  console.log(`DATA STATE:           ${result.state}`);
+  if (result.error) console.log(`ERROR:                ${result.error}`);
 }
 
 main().catch((err) => {

@@ -1,5 +1,7 @@
 import {
   Confidence,
+  CrossSourceDomain,
+  CrossSourceRelationshipType,
   DataState,
   Direction,
   HistoryStatus,
@@ -8,6 +10,7 @@ import {
   MarketState,
   Strength,
   TemporalRelationshipType,
+  TemporalSequenceStatus,
   TrendDirection,
   TrendType,
   type HoodflowReport,
@@ -140,15 +143,70 @@ export const DEMO_REPORT: HoodflowReport = {
       whatWouldChangeAssessment: ["A drop in buy/sell ratio or liquidity failing to keep pace would weaken this read."],
     },
   ],
-  hype: { score: null, state: HypeState.UNKNOWN, quality: "UNKNOWN", confirmation: "UNKNOWN" },
-  social: { state: DataState.DATA_UNAVAILABLE },
-  news: { state: DataState.DATA_UNAVAILABLE },
+  hype: {
+    score: 62,
+    state: HypeState.ACCELERATING,
+    quality: Confidence.MEDIUM,
+    confirmation: Confidence.MEDIUM,
+    components: {
+      mentionVelocity: 4.2,
+      mentionAcceleration: 2.1,
+      uniqueAuthorGrowth: 18,
+      engagementVelocity: 34.5,
+      newsCoverageVelocity: 0.5,
+      socialNewsConvergence: 1,
+    },
+    reasoning: [
+      "Social data usable: 38 matching post(s), velocity 4.20/hr.",
+      "News data usable: 2 distinct stories.",
+      "Social mention velocity changed +100% vs. the previous scan.",
+      "Classified ACCELERATING: mention velocity rose by at least 50% since the previous scan.",
+    ],
+  },
+  social: {
+    state: DataState.AVAILABLE,
+    observationWindowStart: PREVIOUS,
+    observationWindowEnd: NOW,
+    postCount: 38,
+    uniqueAuthorCount: 29,
+    officialPostCount: 1,
+    totalEngagement: 1310,
+    mentionVelocity: 4.2,
+    mentionVelocityChange: 2.1,
+    observations: [],
+    limitations: [],
+  },
+  news: {
+    state: DataState.AVAILABLE,
+    observationWindowStart: PREVIOUS,
+    observationWindowEnd: NOW,
+    articleCount: 3,
+    storyCount: 2,
+    storyGroups: [
+      {
+        representativeTitle: "Demo Protocol Token sees rising on-chain activity",
+        firstPublishedAt: PREVIOUS,
+        memberCount: 2,
+        sources: ["outlet-a.example", "outlet-b.example"],
+        members: [],
+      },
+      {
+        representativeTitle: "Robinhood Chain ecosystem roundup mentions Demo Protocol Token",
+        firstPublishedAt: NOW,
+        memberCount: 1,
+        sources: ["outlet-c.example"],
+        members: [],
+      },
+    ],
+    coverageVelocity: 0.5,
+    limitations: [],
+  },
   dataQuality: {
     contract: DataState.AVAILABLE,
     liquidity: DataState.AVAILABLE,
     holders: DataState.AVAILABLE,
-    social: DataState.DATA_UNAVAILABLE,
-    news: DataState.DATA_UNAVAILABLE,
+    social: DataState.AVAILABLE,
+    news: DataState.AVAILABLE,
     overallConfidencePenalty: null,
   },
   history: {
@@ -222,7 +280,47 @@ export const DEMO_REPORT: HoodflowReport = {
       },
     ],
   },
-  limitations: [
-    "Social and news intelligence are not yet implemented — see docs/ROADMAP.md. social/news fields are always DATA_UNAVAILABLE in this build.",
-  ],
+  crossSource: {
+    dataState: DataState.AVAILABLE,
+    relationships: [
+      {
+        relationshipType: CrossSourceRelationshipType.MULTI_SOURCE_CONVERGENCE,
+        observedAt: NOW,
+        sourcesInvolved: [CrossSourceDomain.ONCHAIN, CrossSourceDomain.SOCIAL, CrossSourceDomain.NEWS],
+        evidence: ["On-chain trend: increasing.", "Social mention velocity: increasing.", "News coverage present: true."],
+        confidence: Confidence.HIGH,
+        interpretation:
+          "On-chain activity, social attention, and news coverage all increased over the same observation window — three independent sources converge.",
+        dataState: DataState.AVAILABLE,
+      },
+    ],
+    temporalAnalysis: [
+      {
+        status: TemporalSequenceStatus.MEASURED,
+        leadingDomain: CrossSourceDomain.SOCIAL,
+        laggingDomain: CrossSourceDomain.ONCHAIN,
+        lagDescription: "approximately 6 hour(s)",
+        description:
+          "Social attention activity was observed to end in the earlier half of the comparison window, approximately 6 hour(s) before the on-chain increase was measured at the end of the window.",
+      },
+    ],
+    limitations: [],
+  },
+  integratedInterpretation: {
+    dataState: DataState.AVAILABLE,
+    whatChanged: [
+      "On-chain: liquidityUsd increased from 390000 to 428000 (+9.7%).",
+      "On-chain: holderCount increased from 2140 to 2610 (+22.0%).",
+      "Social: 38 matching post(s) observed (4.20/hr), up from the previous scan.",
+      "News: 2 distinct stories observed this scan.",
+      "Attention: classified ACCELERATING this scan (score 62/100).",
+    ],
+    crossSourceSummary:
+      "On-chain activity, social attention, and news coverage all increased over the same observation window — three independent sources converge.",
+    whatToMonitor: [
+      "Monitor: this is illustrative demo data — see DataModeBadge. Run a real scan for a live monitoring list.",
+    ],
+    limitations: [],
+  },
+  limitations: [],
 };

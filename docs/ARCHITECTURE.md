@@ -1,6 +1,7 @@
 # HOODFLOW — Architecture
 
-Status: Phase 0–10. Last updated 2026-09-15 (Phase 10).
+Status: Phase 0–11 + Final Intelligence Completion phase. Last updated
+2026-09-15.
 
 ## 1. Discovery findings (Phase 0)
 
@@ -100,6 +101,14 @@ path — but no git credential helper is configured here, so pushing to a
 remote still isn't possible from this environment either. See
 docs/LIVE_VERIFICATION.md's Phase 10 section for the full evidence.
 
+**The Final Intelligence Completion phase re-tested this again for the two
+new hosts** (`api.gdeltproject.org`, `api.twitter.com`) rather than
+assuming the same policy applied without checking: identical result,
+`connect_rejected` at the proxy's CONNECT layer for both, confirmed via the
+real `GdeltNewsClient`/`XSocialClient` classes through
+`scripts/verify-live-providers.ts` and independently via direct `curl -v`.
+See docs/LIVE_VERIFICATION.md's Final Intelligence Completion section.
+
 ## 3. Why this stack
 
 - **TypeScript throughout, pnpm workspaces monorepo.** One language across
@@ -133,20 +142,45 @@ docs/LIVE_VERIFICATION.md's Phase 10 section for the full evidence.
 ## 4. Layered pipeline (implemented so far)
 
 ```
-Provider (Blockscout | GoPlus | DexScreener)
+Provider (Blockscout | GoPlus | DexScreener | GDELT | X)
    -> raw fetch + zod validation           [providers/*]
    -> ProviderResult<T> with DataState     [core/data-state]
-Normalization                              [core/normalize]
+Normalization                              [core/normalize, core/identity/resolve-entity-mention]
 Identity (Phase 5)                         [core/identity, core/analyzers/identity-analyzer]
 Core Analyzers (contract, liquidity, holders) [core/analyzers]
+Social Analyzer (Final phase)              [core/social]
+News Analyzer (Final phase)                [core/news]
 Signal Engine                              [core/signals]
 Relationship Engine                        [core/relationships]
 Evidence Engine                            [core/evidence]
 Interpretation Engine (template-based)     [core/interpretation]
 Historical Intelligence (Phase 6)          [core/historical]  (reads HistoryStore, Phase 4)
+Attention/Hype Engine (Final phase)        [core/attention]  (reads Social + News summaries)
+Cross-Source Engine (Final phase)          [core/cross-source]  (reads on-chain trend + Social + News + Attention)
+Integrated Interpretation (Final phase)    [core/interpretation/integrated-interpretation]
 HOODFLOW Report                            [core/report]
    -> Fastify route GET /v1/report/:chainId/:address
 ```
+
+**Final Intelligence Completion phase (2026-09-15)** added the Social/News
+analyzers, the Attention/Hype Engine, the Cross-Source Engine, and
+Integrated Interpretation — every one of them additive, in the sense that
+no existing stage's inputs, outputs, or behavior changed. `Social Analyzer`
+and `News Analyzer` run alongside the existing Core Analyzers (parallel,
+not sequential — `apps/api/src/pipeline.ts` fetches all five providers
+concurrently via `Promise.all`) and append their own `Signal`s the same way
+identity/historical signals already did: appended to `signals[]`, but
+excluded from `marketState`/`score.dataQualityScore`'s market-signal
+contradiction sweep (informational, not market risk — same placement rule
+Phase 5/6 established). The Attention/Hype Engine and Cross-Source Engine
+are pure classifiers/combiners over already-computed summaries, exactly
+like `interpretation/market-state.ts`'s own pattern — neither emits its own
+`Signal[]`; the observational facts underneath them were already signaled
+upstream. See docs/SOCIAL_NEWS_INTELLIGENCE.md,
+docs/HYPE_ATTENTION.md, and docs/CROSS_SOURCE_INTELLIGENCE.md for the full
+detail on each new stage, including exactly why Cross-Source Intelligence
+is a *third* relationship engine rather than an extension of either
+existing one.
 
 Identity resolution (Phase 5, docs/IDENTITY_RESOLUTION.md) sits between
 Normalization and the Signal Engine: it decides what exact asset is being
@@ -171,11 +205,14 @@ separate, small Temporal Relationship Engine
 cross-snapshot Trends, not same-snapshot Signals — a structurally
 different input.
 
-Wallet-cluster/deployer-history analyzers and the social/news/hype layers
-are architected for (types exist in `core/types`) but not yet
-implemented — see `docs/ROADMAP.md`. A Postgres-backed `HistoryStore`
-(replacing the Phase 4 in-memory implementation, still used as-is by
-Phase 6) is also not yet built.
+Wallet-cluster/deployer-history analyzers remain architected for (types
+exist in `core/types`) but not implemented — see `docs/ROADMAP.md`. The
+social/news/hype/cross-source layers this note previously listed as
+not-yet-implemented were built in the Final Intelligence Completion phase
+(see the pipeline diagram and docs/SOCIAL_NEWS_INTELLIGENCE.md,
+docs/HYPE_ATTENTION.md, docs/CROSS_SOURCE_INTELLIGENCE.md). A
+Postgres-backed `HistoryStore` (replacing the Phase 4 in-memory
+implementation, still used as-is) is also not yet built.
 
 ## 5. Data integrity rules enforced in code
 

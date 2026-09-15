@@ -7,6 +7,10 @@ import { MarketSnapshotCard } from "./MarketSnapshotCard";
 import { ModuleAnalysis } from "./ModuleAnalysis";
 import { WhatChanged } from "./WhatChanged";
 import { HistoricalIntelligence } from "./HistoricalIntelligence";
+import { SocialIntelligence } from "./SocialIntelligence";
+import { NewsIntelligence } from "./NewsIntelligence";
+import { Attention } from "./Attention";
+import { CrossSourceIntelligence } from "./CrossSourceIntelligence";
 import { Interpretations } from "./Interpretations";
 import { Monitoring } from "./Monitoring";
 
@@ -29,6 +33,10 @@ export function ReportView({ report, mode }: { report: HoodflowReport; mode: "de
       <ModuleAnalysis report={report} />
       <WhatChanged report={report} />
       <HistoricalIntelligence report={report} />
+      <SocialIntelligence report={report} />
+      <NewsIntelligence report={report} />
+      <Attention report={report} />
+      <CrossSourceIntelligence report={report} />
       <Interpretations report={report} />
       <Monitoring report={report} />
     </div>

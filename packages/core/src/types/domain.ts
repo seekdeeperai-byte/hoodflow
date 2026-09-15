@@ -89,4 +89,24 @@ export interface TokenSnapshot {
     data?: HolderSummary;
     error?: string;
   };
+  /**
+   * Raw social observations for this scan's window (Final Intelligence
+   * Completion phase). `data`, when present, is the provider's normalized
+   * post list — summarization/aggregation into `SocialSummary` happens in
+   * social/social-analyzer.ts, not here, matching the existing convention
+   * that TokenSnapshot holds normalized-but-unaggregated provider output.
+   * Optional (not required) so every existing snapshot literal in this
+   * codebase's tests keeps compiling unchanged.
+   */
+  social?: {
+    state: import("./data-state.js").DataState;
+    data?: import("./social-news.js").SocialObservation[];
+    error?: string;
+  };
+  /** Raw news observations for this scan's window — see `social` above for the same rationale. */
+  news?: {
+    state: import("./data-state.js").DataState;
+    data?: import("./social-news.js").NewsObservation[];
+    error?: string;
+  };
 }

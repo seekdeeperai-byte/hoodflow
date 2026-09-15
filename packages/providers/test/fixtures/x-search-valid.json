@@ -1,0 +1,15 @@
+{
+  "data": [
+    {
+      "id": "1",
+      "text": "$USDG is trending on Robinhood Chain",
+      "created_at": "2026-09-14T12:00:00.000Z",
+      "author_id": "u1",
+      "public_metrics": { "retweet_count": 5, "reply_count": 2, "like_count": 10, "quote_count": 1 }
+    }
+  ],
+  "includes": {
+    "users": [{ "id": "u1", "username": "cryptowatcher", "verified": false }]
+  },
+  "meta": { "result_count": 1 }
+}

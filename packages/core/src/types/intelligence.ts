@@ -58,6 +58,18 @@ export const SignalType = {
   IDENTITY_COLLISION: "IDENTITY_COLLISION",
   OFFICIAL_IDENTITY_MATCH: "OFFICIAL_IDENTITY_MATCH",
   NON_OFFICIAL_IDENTITY_CONTEXT: "NON_OFFICIAL_IDENTITY_CONTEXT",
+
+  // Social + News + Attention (Final Intelligence Completion phase) — see
+  // packages/core/src/social/social-analyzer.ts, news/news-analyzer.ts, and
+  // attention/attention-engine.ts. Deliberately NEUTRAL-direction by default
+  // (see analyzeSocial/analyzeNews/analyzeAttention doc comments): "more
+  // attention" is an observation, not a risk judgment, so these never carry
+  // the same POSITIVE/NEGATIVE risk-valence semantics as e.g. HOLDER_GROWTH.
+  SOCIAL_ATTENTION_LEVEL: "SOCIAL_ATTENTION_LEVEL",
+  SOCIAL_ATTENTION_ACCELERATION: "SOCIAL_ATTENTION_ACCELERATION",
+  NEWS_COVERAGE_LEVEL: "NEWS_COVERAGE_LEVEL",
+  NEWS_COVERAGE_ACCELERATION: "NEWS_COVERAGE_ACCELERATION",
+  ATTENTION_STATE_CHANGE: "ATTENTION_STATE_CHANGE",
 } as const;
 export type SignalType = (typeof SignalType)[keyof typeof SignalType];
 
@@ -173,14 +185,38 @@ export interface HoodflowReport {
   signals: Signal[];
   relationships: Relationship[];
   interpretations: Interpretation[];
+  /**
+   * Attention/Hype (Final Intelligence Completion phase §5). Reuses the
+   * pre-existing `HypeState` enum for `state` — see
+   * packages/core/src/attention/attention-engine.ts for the exact,
+   * documented, reproducible formula and docs/HYPE_ATTENTION.md for the
+   * HypeState<->spec-suggested-AttentionState mapping. `components` and
+   * `reasoning` are additive (never present in the pre-Phase-12 stub value,
+   * so existing consumers that only read `score`/`state`/`quality`/
+   * `confirmation` are unaffected).
+   */
   hype: {
     score: number | null;
     state: HypeState;
     quality: "UNKNOWN" | Confidence;
     confirmation: "UNKNOWN" | Confidence;
+    /** Exposed formula inputs — see attention-engine.ts. Empty/absent fields mean that input was unavailable, never 0. */
+    components?: import("./social-news.js").AttentionComponents;
+    /** Plain-language, non-causal explanation of how `state` was reached. */
+    reasoning?: string[];
   };
-  social: { state: import("./data-state.js").DataState };
-  news: { state: import("./data-state.js").DataState };
+  /**
+   * Social intelligence (Final Intelligence Completion phase §3). `state`
+   * is preserved exactly as it was in every prior build (a bare
+   * `{ state: DataState }`, always DATA_UNAVAILABLE) for backward
+   * compatibility; the additional fields below are new and additive — see
+   * packages/core/src/social/social-analyzer.ts and types/social-news.ts's
+   * `SocialSummary`, which this type structurally mirrors minus the
+   * `dataState`/`state` naming.
+   */
+  social: { state: import("./data-state.js").DataState } & Omit<import("./social-news.js").SocialSummary, "dataState">;
+  /** News intelligence (§4) — see news/news-analyzer.ts and types/social-news.ts's `NewsSummary`. */
+  news: { state: import("./data-state.js").DataState } & Omit<import("./social-news.js").NewsSummary, "dataState">;
   dataQuality: DataQuality;
   /**
    * "What changed since the last observation?" (Phase 6) — deltas, trends,
@@ -192,5 +228,19 @@ export interface HoodflowReport {
    * or `marketState` (docs/HISTORICAL_INTELLIGENCE.md "Score integrity").
    */
   history: import("./history.js").HistoricalComparison;
+  /**
+   * Cross-Source Intelligence (§6-9) — on-chain + historical + social + news
+   * + attention relationships. A new, additive top-level field (not a
+   * replacement of `relationships`, which stays scoped to same-snapshot
+   * on-chain Signals). See types/cross-source.ts and
+   * cross-source/cross-source-engine.ts.
+   */
+  crossSource: import("./cross-source.js").CrossSourceIntelligence;
+  /**
+   * Final synthesis layer (§12-13): WHAT CHANGED / cross-source
+   * interpretation / WHAT TO MONITOR, spanning every domain above. Additive;
+   * never a trade recommendation. See types/cross-source.ts.
+   */
+  integratedInterpretation: import("./cross-source.js").IntegratedInterpretation;
   limitations: string[];
 }

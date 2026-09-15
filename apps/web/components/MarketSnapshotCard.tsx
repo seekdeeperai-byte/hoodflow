@@ -5,11 +5,14 @@ import { DataUnavailable } from "./DataUnavailable";
 
 /**
  * IA layer 4 — "Current Market / On-Chain Signals" snapshot: the fields
- * that aren't already covered by the per-module breakdown (layer 5) —
- * attention/hype level and social/news coverage. Hype is UNKNOWN in every
- * build today (no hype provider is wired up yet — see docs/ROADMAP.md), so
- * this card will show its real "not implemented" state rather than a fake
- * number; that is expected, not a bug.
+ * that aren't already covered by the per-module breakdown (layer 5) — an
+ * at-a-glance summary of attention/hype level and social/news coverage,
+ * ahead of the full detail in the dedicated Social Signals / News & Context
+ * / Attention sections further down the page (see ReportView.tsx). As of
+ * the Final Intelligence Completion phase this reflects the real
+ * `report.hype`/`social`/`news` DataState — UNKNOWN/unavailable here means
+ * this specific scan had no usable data (no credential configured, or the
+ * provider was unreachable), never "not implemented."
  */
 
 const HYPE_TONE: Record<string, BadgeTone> = {
@@ -35,7 +38,7 @@ export function MarketSnapshotCard({ report }: { report: HoodflowReport }) {
       </div>
 
       {hype.state === "UNKNOWN" || hype.score === null ? (
-        <DataUnavailable reason="Attention/hype intelligence is not yet implemented in this build — this is a known gap, not a scan failure." />
+        <DataUnavailable reason="Attention could not be classified this scan — neither social nor news data was usable. See the Attention section below for exactly why." />
       ) : (
         <div className={styles.row}>
           <span className={styles.label}>Hype score</span>

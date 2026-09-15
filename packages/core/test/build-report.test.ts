@@ -4,6 +4,7 @@ import { DataState } from "../src/types/data-state.js";
 import type { TokenSnapshot } from "../src/types/domain.js";
 import { MarketState } from "../src/types/intelligence.js";
 import { resolveIdentity } from "../src/identity/resolve-identity.js";
+import { EntityMatchBasis, SourceQuality } from "../src/types/social-news.js";
 
 const baseToken = { chainId: 4663, address: "0x1111111111111111111111111111111111111111" };
 const now = new Date().toISOString();
@@ -38,10 +39,127 @@ describe("buildReport", () => {
     expect(report.dataQuality.overallConfidencePenalty).toBe("LOW"); // unchanged from Phase 0-4: driven only by contract/liquidity/holders unavailability
   });
 
-  it("never fabricates social/news data — always DATA_UNAVAILABLE in this build", () => {
+  it("never fabricates social/news data — defaults to DATA_UNAVAILABLE when the snapshot carries no social/news observations", () => {
     const report = buildReport(snapshot({}));
     expect(report.social.state).toBe(DataState.DATA_UNAVAILABLE);
     expect(report.news.state).toBe(DataState.DATA_UNAVAILABLE);
+    expect(report.hype.state).toBe("UNKNOWN");
+    expect(report.hype.score).toBeNull();
+    expect(report.crossSource.dataState).toBe(DataState.DATA_UNAVAILABLE);
+    expect(report.crossSource.relationships[0]?.relationshipType).toBe("INSUFFICIENT_CROSS_SOURCE_DATA");
+  });
+
+  describe("Final Intelligence Completion phase: social + news + attention + cross-source", () => {
+    it("wires real social observations through to report.social, report.hype, and report.signals", () => {
+      const report = buildReport(
+        snapshot({
+          social: {
+            state: DataState.AVAILABLE,
+            data: [
+              {
+                source: "x",
+                observedAt: "2026-09-14T12:00:00.000Z",
+                officialClassification: "UNOFFICIAL",
+                entityMatch: { basis: EntityMatchBasis.SYMBOL_UNAMBIGUOUS, note: "matched" },
+                sourceQuality: SourceQuality.PUBLIC_SOCIAL,
+              },
+            ],
+          },
+        }),
+      );
+      expect(report.social.state).toBe(DataState.AVAILABLE);
+      expect(report.social.postCount).toBe(1);
+      expect(report.signals.some((s) => s.signalType === "SOCIAL_ATTENTION_LEVEL")).toBe(true);
+      expect(report.dataQuality.social).toBe(DataState.AVAILABLE);
+    });
+
+    it("wires real news observations through to report.news with syndication grouping intact", () => {
+      const report = buildReport(
+        snapshot({
+          news: {
+            state: DataState.AVAILABLE,
+            data: [
+              {
+                source: "outlet-a.com",
+                title: "A real headline about this token",
+                publishedAt: "2026-09-14T12:00:00.000Z",
+                entityMatch: { basis: EntityMatchBasis.OFFICIAL_NAME, note: "matched" },
+                sourceQuality: SourceQuality.ESTABLISHED_PUBLISHER,
+                category: "MARKET_COVERAGE",
+              },
+              {
+                source: "outlet-b.com",
+                title: "A real headline about this token",
+                publishedAt: "2026-09-14T13:00:00.000Z",
+                entityMatch: { basis: EntityMatchBasis.OFFICIAL_NAME, note: "matched" },
+                sourceQuality: SourceQuality.ESTABLISHED_PUBLISHER,
+                category: "MARKET_COVERAGE",
+              },
+            ],
+          },
+        }),
+      );
+      expect(report.news.articleCount).toBe(2);
+      expect(report.news.storyCount).toBe(1); // syndicated, not double-counted
+    });
+
+    it("Score integrity: social/news/attention/cross-source presence never changes marketState or dataQualityScore", () => {
+      const withoutSocial = buildReport(
+        snapshot({ liquidity: { state: DataState.AVAILABLE, data: { liquidityUsd: 200_000, marketCapUsd: 220_000, buys24h: 340, sells24h: 110 } } }),
+      );
+      const withSocial = buildReport(
+        snapshot({
+          liquidity: { state: DataState.AVAILABLE, data: { liquidityUsd: 200_000, marketCapUsd: 220_000, buys24h: 340, sells24h: 110 } },
+          social: {
+            state: DataState.AVAILABLE,
+            data: [
+              {
+                source: "x",
+                observedAt: "2026-09-14T12:00:00.000Z",
+                officialClassification: "UNOFFICIAL",
+                entityMatch: { basis: EntityMatchBasis.SYMBOL_UNAMBIGUOUS, note: "matched" },
+                sourceQuality: SourceQuality.PUBLIC_SOCIAL,
+              },
+            ],
+          },
+        }),
+      );
+      expect(withSocial.marketState.state).toBe(withoutSocial.marketState.state);
+      expect(withSocial.score.dataQualityScore).toBe(withoutSocial.score.dataQualityScore);
+      expect(withSocial.dataQuality.overallConfidencePenalty).toBe(withoutSocial.dataQuality.overallConfidencePenalty);
+    });
+
+    it("integratedInterpretation.whatChanged spans on-chain and social/news/attention domains, never fabricated when a domain is unavailable", () => {
+      const report = buildReport(
+        snapshot({
+          social: {
+            state: DataState.AVAILABLE,
+            data: [
+              {
+                source: "x",
+                observedAt: "2026-09-14T12:00:00.000Z",
+                officialClassification: "UNOFFICIAL",
+                entityMatch: { basis: EntityMatchBasis.SYMBOL_UNAMBIGUOUS, note: "matched" },
+                sourceQuality: SourceQuality.PUBLIC_SOCIAL,
+              },
+            ],
+          },
+        }),
+      );
+      expect(report.integratedInterpretation.whatChanged.some((w) => w.startsWith("Social:"))).toBe(true);
+      expect(report.integratedInterpretation.dataState).not.toBe(DataState.DATA_UNAVAILABLE);
+    });
+
+    it("integratedInterpretation.crossSourceSummary is null (not fabricated) when no real cross-source relationship was found", () => {
+      const report = buildReport(snapshot({}));
+      expect(report.integratedInterpretation.crossSourceSummary).toBeNull();
+    });
+
+    it("never states a trade recommendation anywhere in the integrated interpretation", () => {
+      const report = buildReport(snapshot({}));
+      const allText = [...report.integratedInterpretation.whatChanged, ...report.integratedInterpretation.whatToMonitor, report.integratedInterpretation.crossSourceSummary ?? ""].join(" ");
+      expect(allText.toLowerCase()).not.toMatch(/\bbuy\b|\bsell\b|\bshould invest\b/);
+    });
   });
 
   it("selects CONTRACT_RISK when a high-severity contract signal is present, overriding market-state relationships", () => {

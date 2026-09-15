@@ -12,8 +12,13 @@ import { selectMarketState } from "../interpretation/market-state.js";
 import { detectRelationships } from "../relationships/relationship-engine.js";
 import { buildHistoricalComparison } from "../historical/build-history.js";
 import { buildHistoricalSignals } from "../historical/historical-signals.js";
-import { Confidence, HypeState, type HoodflowReport, type Signal } from "../types/intelligence.js";
+import { Confidence, type HoodflowReport, type Signal } from "../types/intelligence.js";
 import { assessFreshness } from "../freshness.js";
+import { analyzeSocial } from "../social/social-analyzer.js";
+import { analyzeNews } from "../news/news-analyzer.js";
+import { computeAttention } from "../attention/attention-engine.js";
+import { analyzeCrossSource } from "../cross-source/cross-source-engine.js";
+import { buildIntegratedInterpretation } from "../interpretation/integrated-interpretation.js";
 
 const CONFIDENCE_WEIGHT: Record<Confidence, number> = { LOW: 1, MEDIUM: 2, HIGH: 3 };
 
@@ -131,6 +136,49 @@ export function buildReport(snapshot: TokenSnapshot, options: BuildReportOptions
     );
   }
 
+  // Final Intelligence Completion phase: social + news + attention + cross-source. Same
+  // placement/reasoning as identity (Phase 5) and historical (Phase 6) signals above —
+  // appended AFTER the market Relationship/Evidence/marketState sweep and AFTER
+  // marketLimitationsCount was captured, so this new layer stays purely informational and
+  // never touches marketState or score.dataQualityScore. See docs/SOCIAL_NEWS_INTELLIGENCE.md
+  // and docs/CROSS_SOURCE_INTELLIGENCE.md.
+  const prevSocial = options.previousSnapshot?.social;
+  const prevSocialSummary = prevSocial ? analyzeSocial(prevSocial.data, prevSocial.state, { now: options.previousSnapshot!.capturedAt }).summary : undefined;
+
+  const socialResult = analyzeSocial(snapshot.social?.data, snapshot.social?.state ?? DataState.DATA_UNAVAILABLE, {
+    previousSummary: prevSocialSummary,
+    now: snapshot.capturedAt,
+  });
+  const newsResult = analyzeNews(snapshot.news?.data, snapshot.news?.state ?? DataState.DATA_UNAVAILABLE, { now: snapshot.capturedAt });
+  signals.push(...socialResult.signals, ...newsResult.signals);
+  limitations.push(...socialResult.summary.limitations, ...newsResult.summary.limitations);
+
+  const hype = computeAttention(socialResult.summary, newsResult.summary);
+
+  const { dataState: socialDataState, ...socialRest } = socialResult.summary;
+  const reportSocial = { state: socialDataState, ...socialRest };
+  const { dataState: newsDataState, ...newsRest } = newsResult.summary;
+  const reportNews = { state: newsDataState, ...newsRest };
+
+  const crossSource = analyzeCrossSource({
+    now: snapshot.capturedAt,
+    social: socialResult.summary,
+    news: newsResult.summary,
+    hype,
+    history,
+  });
+  limitations.push(...crossSource.limitations);
+
+  const integratedInterpretation = buildIntegratedInterpretation({
+    history,
+    social: reportSocial,
+    news: reportNews,
+    hype,
+    crossSource,
+    signals,
+    limitations,
+  });
+
   return {
     token: snapshot.token,
     generatedAt: snapshot.capturedAt,
@@ -141,22 +189,21 @@ export function buildReport(snapshot: TokenSnapshot, options: BuildReportOptions
     signals,
     relationships,
     interpretations,
-    hype: { score: null, state: HypeState.UNKNOWN, quality: "UNKNOWN", confirmation: "UNKNOWN" },
-    social: { state: DataState.DATA_UNAVAILABLE },
-    news: { state: DataState.DATA_UNAVAILABLE },
+    hype,
+    social: reportSocial,
+    news: reportNews,
     dataQuality: {
       contract: snapshot.contract.state,
       liquidity: snapshot.liquidity.state,
       holders: snapshot.holders.state,
-      social: DataState.DATA_UNAVAILABLE,
-      news: DataState.DATA_UNAVAILABLE,
+      social: socialResult.summary.dataState,
+      news: newsResult.summary.dataState,
       overallConfidencePenalty:
         marketLimitationsCount >= 2 ? Confidence.LOW : marketLimitationsCount === 1 ? Confidence.MEDIUM : null,
     },
     history,
-    limitations: [
-      ...limitations,
-      "Social and news intelligence are not yet implemented — see docs/ROADMAP.md. social/news fields are always DATA_UNAVAILABLE in this build.",
-    ],
+    crossSource,
+    integratedInterpretation,
+    limitations,
   } satisfies HoodflowReport;
 }
