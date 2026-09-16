@@ -15,9 +15,11 @@
     "@hoodflow/core": "workspace:*",
     "@hoodflow/providers": "workspace:*",
     "fastify": "^5.2.0",
+    "pg": "^8.23.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@types/pg": "^8.23.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }

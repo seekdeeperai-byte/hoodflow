@@ -27,6 +27,18 @@ export interface SocialClientOptions {
 export class XSocialClient {
   constructor(private readonly opts: SocialClientOptions = {}) {}
 
+  /**
+   * True only when a bearer token was actually supplied — never the token
+   * value itself. Exists so callers (e.g. the API's /readiness endpoint) can
+   * report real credential state without reaching into private client
+   * options or, worse, treating "a client instance was constructed" as proof
+   * of configuration — server.ts always constructs one unconditionally, so
+   * object presence alone doesn't tell you whether X_BEARER_TOKEN is set.
+   */
+  get isConfigured(): boolean {
+    return Boolean(this.opts.bearerToken);
+  }
+
   async searchRecentPosts(
     query: string,
     target: { contractAddress: string; officialName?: string; symbol?: string },

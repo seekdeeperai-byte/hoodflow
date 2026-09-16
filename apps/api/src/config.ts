@@ -16,6 +16,17 @@ const EnvSchema = z.object({
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(30),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  /**
+   * Durable history (§18, REAL WORLD DEPLOYMENT phase). Unset by default —
+   * HOODFLOW then keeps using InMemoryHistoryStore exactly as before,
+   * so this is purely additive and never a required var. When set,
+   * server.ts constructs a PostgresHistoryStore instead: see
+   * apps/api/src/history/postgres-history-store.ts and
+   * apps/api/migrations/001_init.sql. Never logged — only its presence is
+   * ever reported (e.g. via /readiness), never the value, since it carries
+   * embedded database credentials.
+   */
+  DATABASE_URL: z.string().optional(),
 });
 
 export type Config = z.infer<typeof EnvSchema>;

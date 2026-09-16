@@ -96,12 +96,15 @@ docs/                  Architecture, data sources, scoring, security, roadmap
 ```bash
 pnpm install
 pnpm -r run build
-pnpm test              # 314 tests, all fixture-backed (see docs/ARCHITECTURE.md §2)
-cp apps/api/.env.example apps/api/.env   # optional: GOPLUS_API_KEY / BLOCKSCOUT_API_KEY / X_BEARER_TOKEN
+pnpm test              # 320 tests always run; +6 real Postgres integration tests when DATABASE_URL is set (see docs/HISTORY_SCHEMA.md)
+cp apps/api/.env.example apps/api/.env   # optional: GOPLUS_API_KEY / BLOCKSCOUT_API_KEY / X_BEARER_TOKEN / DATABASE_URL
 cp apps/web/.env.example apps/web/.env.local   # optional: HOODFLOW_API_BASE_URL (defaults to localhost:8787)
 pnpm --filter @hoodflow/api run start    # after build, or `run dev` for tsx watch mode
-curl http://localhost:8787/healthz
+curl http://localhost:8787/healthz       # legacy, kept for existing external health-check config
+curl http://localhost:8787/liveness      # is the process alive
+curl http://localhost:8787/readiness     # is this instance ready to serve traffic (never gates on provider reachability — see apps/api/src/health.ts)
 curl http://localhost:8787/v1/report/4663/0xYOUR_TOKEN_ADDRESS
+curl http://localhost:8787/v1/pulse/4663
 
 # frontend (in a second terminal, with the API above already running on :8787)
 pnpm --filter @hoodflow/web run dev      # http://localhost:3000

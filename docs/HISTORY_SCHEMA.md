@@ -1,15 +1,37 @@
 # HOODFLOW — Historical Persistence: Schema & Design
 
-Status: interface + in-memory implementation built in Phase 4, reused
-as-is (unchanged) by both Phase 5 (identity) and Phase 6 (historical
-comparison/trends/temporal relationships — see
-docs/HISTORICAL_INTELLIGENCE.md). A real Postgres implementation remains
-deliberately deferred until a deployment target/DB decision is made (see
-the Phase 4 report's "needs product-owner input") — Phase 6 confirmed the
-existing interface (`recordScan`, `getPreviousSnapshot`, `getScansSince`)
-is already sufficient for real, working delta/trend/temporal-relationship
-intelligence and did not need to change it. This doc is written so that
-decision is a schema-mapping exercise, not a design exercise.
+**Status update (REAL WORLD DEPLOYMENT phase, 2026-09-16): a real, durable
+`PostgresHistoryStore` now exists** — `apps/api/src/history/postgres-history-store.ts`,
+implementing the unchanged `HistoryStore` interface described below, applied
+via `apps/api/migrations/001_init.sql`. Set `DATABASE_URL` and `server.ts`
+uses it automatically instead of `InMemoryHistoryStore`; unset, behavior is
+identical to every prior phase. **It deliberately does NOT implement the
+fully normalized schema sketched later in this doc** — see the rationale
+comment at the top of `001_init.sql` (in short: one JSONB row per scan,
+indexed on `(chain_id, address, captured_at)`, so the full `ScanRecord` can
+never be silently truncated by an incomplete column mapping as
+`HoodflowReport` grows). Verified for real against a locally-started
+PostgreSQL 16 instance in this sandbox: `apps/api/test/postgres-history-store.test.ts`
+(6 tests, real SQL, `describe.skipIf(!DATABASE_URL)` — never fixture-faked),
+plus a manual process-restart proof (scan → kill the server → restart → scan
+again → second scan's `history.status` came back `COMPARABLE` against the
+pre-restart observation). No managed cloud Postgres credential exists in
+this sandbox, so this proves the code, not a production database — see the
+REAL WORLD DEPLOYMENT final report's DEPLOYMENT section for that boundary.
+The normalized schema below remains a valid *additive* future option for
+direct SQL analytics over specific fields; it was never required by any
+consumer of the `HistoryStore` interface, which the rest of this doc still
+accurately describes.
+
+---
+
+Status (original, Phase 4-11): interface + in-memory implementation built in
+Phase 4, reused as-is (unchanged) by both Phase 5 (identity) and Phase 6
+(historical comparison/trends/temporal relationships — see
+docs/HISTORICAL_INTELLIGENCE.md). Phase 6 confirmed the existing interface
+(`recordScan`, `getPreviousSnapshot`, `getScansSince`) is already sufficient
+for real, working delta/trend/temporal-relationship intelligence and did not
+need to change it.
 
 ## Design goal (from the product spec)
 

@@ -1,9 +1,21 @@
 import { GoPlusClient, DexScreenerClient, BlockscoutClient, GdeltNewsClient, XSocialClient, getChainConfig } from "@hoodflow/providers";
+import { InMemoryHistoryStore, type HistoryStore } from "@hoodflow/core";
 import { buildApp } from "./app.js";
 import { loadConfig } from "./config.js";
+import { PostgresHistoryStore } from "./history/postgres-history-store.js";
 
 async function main() {
   const config = loadConfig();
+
+  // Durable history (§18): DATABASE_URL configured -> Postgres-backed, real
+  // persistence across restarts. Unset -> the same InMemoryHistoryStore this
+  // build has always defaulted to (lost on restart, single-process only —
+  // see InMemoryHistoryStore's own doc comment). This is the one place a
+  // concrete HistoryStore implementation is chosen; nothing else in the
+  // codebase needs to know or care which one is in use.
+  const historyStore: HistoryStore = config.DATABASE_URL
+    ? new PostgresHistoryStore(config.DATABASE_URL)
+    : new InMemoryHistoryStore();
 
   const goplus = new GoPlusClient({ apiKey: config.GOPLUS_API_KEY });
   const dexscreener = new DexScreenerClient();
@@ -20,7 +32,7 @@ async function main() {
   const news = new GdeltNewsClient();
   const social = new XSocialClient({ bearerToken: config.X_BEARER_TOKEN });
 
-  const app = await buildApp(config, { goplus, dexscreener, blockscout, blockscoutChainId: 4663, social, news });
+  const app = await buildApp(config, { goplus, dexscreener, blockscout, blockscoutChainId: 4663, social, news }, historyStore);
 
   await app.listen({ port: config.PORT, host: config.HOST });
 }

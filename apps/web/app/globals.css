@@ -81,6 +81,19 @@ body {
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  /* Real mobile-overflow defect found during REAL WORLD DEPLOYMENT browser QA
+     (2026-09-16): evidence/limitation strings routinely embed long unbroken
+     tokens (0x-addresses, tx hashes) inline in ordinary prose (e.g. "reports
+     the on-chain creator address as 0x0000...ea1"). Normal white-space
+     wrapping only breaks at spaces, so a 42-char hex string with no spaces
+     doesn't wrap and pushed the page ~9px past the viewport at 390px width —
+     confirmed via a real headless-browser pass, not a truncated-Badge case
+     (that class of bug was already fixed — see EcosystemIntelligence's
+     truncateId()). overflow-wrap: anywhere is the standard fix for exactly
+     this "long token embedded in prose" case, applied globally rather than
+     per-component since any evidence/limitation string anywhere in the app
+     can legitimately contain a raw address. */
+  overflow-wrap: anywhere;
 }
 
 a {
