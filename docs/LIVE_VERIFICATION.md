@@ -503,7 +503,7 @@ environment as every prior phase — re-tested rather than assumed.
   build (`node dist/server.js`), not just the dev server.
 - **GitHub/remote: unchanged, re-checked, not re-attempted with a
   workaround.** `git remote -v` is empty; `git ls-remote
-  https://github.com/seepdeeperai-byte/hoodflow` fails with `"could not
+  https://github.com/seekdeeperai-byte/hoodflow` fails with `"could not
   read Username for 'https://github.com': terminal prompts disabled"` —
   the identical, first-hand credential-absence signature Phase 11 already
   established directly (not just inferred from config). No credential
