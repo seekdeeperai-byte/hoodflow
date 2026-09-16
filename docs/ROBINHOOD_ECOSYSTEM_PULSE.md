@@ -2,6 +2,22 @@
 
 Status: FINAL GAP CLOSURE phase. Last updated 2026-09-16.
 
+**Bug fixed (HOODFLOW MASTERPLUS audit, 2026-09-16):** `buildEcosystemPulse`
+dereferenced `scan.report.events.events` and a few other `scan.report.*`
+paths without a null check. A single stored `ScanRecord` whose `report` was
+missing or malformed — a real condition, not a hypothetical: found live
+against an actual running server + real Postgres-backed `HistoryStore`
+after a stale test-fixture row was left in the shared local database — threw
+an uncaught `TypeError` and 500'd the entire `/v1/pulse/:chainId` endpoint
+for every token on the chain, not just the one bad record. Fixed with a
+`scanEvents()` accessor (and optional chaining at three other sites) that
+treats an unreadable record's contribution to a dimension as zero rather
+than crashing — the same "missing != zero" principle applied one level
+down: it does not claim zero events *happened*, only that zero could be
+*counted from this specific record*. Every other tracked token's data is
+unaffected. Regression test: `packages/core/test/pulse-engine.test.ts`
+("does not crash when one scan record has a malformed/missing report").
+
 ## What this answers
 
 "What is happening across the Robinhood ecosystem right now?" — the one

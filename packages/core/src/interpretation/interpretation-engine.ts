@@ -19,7 +19,7 @@ const HEADLINES: Record<string, string> = {
   COOLING: "Momentum is weakening",
 };
 
-export function buildInterpretations(relationships: Relationship[], evidence: EvidenceItem[]): Interpretation[] {
+export function buildInterpretations(relationships: Relationship[], evidence: EvidenceItem[], observedAt: string): Interpretation[] {
   return relationships.map((rel, i) => {
     const ev = evidence[i];
     return {
@@ -31,6 +31,8 @@ export function buildInterpretations(relationships: Relationship[], evidence: Ev
       confidence: ev?.confidence ?? rel.confidence,
       limitations: [],
       whatWouldChangeAssessment: whatWouldChange(rel),
+      observedAt,
+      source: "relationship_analysis",
     } satisfies Interpretation;
   });
 }
@@ -51,7 +53,7 @@ function whatWouldChange(rel: Relationship): string[] {
 }
 
 /** Standalone interpretation for high-severity contract signals that aren't part of a market relationship. */
-export function buildContractInterpretation(signals: Signal[]): Interpretation | null {
+export function buildContractInterpretation(signals: Signal[], observedAt: string): Interpretation | null {
   const risky = signals.filter((s) => s.source === "contract" && s.direction === Direction.NEGATIVE);
   if (risky.length === 0) return null;
   const highCount = risky.filter((s) => s.strength === Strength.HIGH).length;
@@ -66,5 +68,7 @@ export function buildContractInterpretation(signals: Signal[]): Interpretation |
     confidence: "HIGH",
     limitations: [],
     whatWouldChangeAssessment: ["Ownership renounced, or the risky capability removed via a verified upgrade."],
+    observedAt,
+    source: "contract_risk_analysis",
   };
 }

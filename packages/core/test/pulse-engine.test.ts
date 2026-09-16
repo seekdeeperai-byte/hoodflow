@@ -134,4 +134,49 @@ describe("buildEcosystemPulse", () => {
 
     expect(build()).toEqual(build());
   });
+
+  // Regression test for a real crash found during the HOODFLOW MASTERPLUS audit
+  // (2026-09-16): buildEcosystemPulse dereferenced `scan.report.events.events`
+  // (and a few other `scan.report.*` paths) without a null check, so a single
+  // scan record whose `report` was missing/malformed (e.g. a HistoryStore
+  // returning a legacy or corrupted row) threw an uncaught TypeError and 500'd
+  // the entire chain-level Pulse endpoint for every other, perfectly good
+  // token. Discovered live against a real Postgres-backed HistoryStore whose
+  // table had a stale test-fixture row with an empty `report: {}`.
+  it("does not crash when one scan record has a malformed/missing report — treats its contribution as zero rather than throwing", () => {
+    const addressA = "0x1111111111111111111111111111111111111111";
+    const addressB = "0x2222222222222222222222222222222222222222";
+    const goodScan = scanRecord(addressA, NOW, 1000, 100_000);
+    const malformedScan = {
+      snapshot: snapshot(addressB, NOW, 500, 50_000),
+      report: {} as ScanRecord["report"], // simulates a legacy/corrupted stored record
+    };
+
+    expect(() =>
+      buildEcosystemPulse({
+        chainId: CHAIN_ID,
+        chainName: "Robinhood Chain",
+        registrySize: 3,
+        window: PulseWindow.TWENTY_FOUR_HOURS,
+        windowStartedAt: PREVIOUS,
+        windowEndedAt: NOW,
+        generatedAt: NOW,
+        scans: [goodScan, malformedScan],
+      }),
+    ).not.toThrow();
+
+    const pulse = buildEcosystemPulse({
+      chainId: CHAIN_ID,
+      chainName: "Robinhood Chain",
+      registrySize: 3,
+      window: PulseWindow.TWENTY_FOUR_HOURS,
+      windowStartedAt: PREVIOUS,
+      windowEndedAt: NOW,
+      generatedAt: NOW,
+      scans: [goodScan, malformedScan],
+    });
+    // Both scans are still counted as tracked tokens (coverage isn't lost); the
+    // malformed one just can't contribute to report-derived dimensions.
+    expect(pulse.coverage.trackedTokenCount).toBe(2);
+  });
 });

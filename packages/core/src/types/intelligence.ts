@@ -150,6 +150,20 @@ export interface Interpretation {
   confidence: Confidence;
   limitations: string[];
   whatWouldChangeAssessment: string[];
+  /**
+   * Provenance normalization (HOODFLOW MASTERPLUS audit, 2026-09-16): every
+   * other relationship/evidence-shaped object in this codebase
+   * (CrossSourceRelationship, CanonicalRelationship) self-describes its own
+   * `observedAt` and a source label — Interpretation didn't, even though the
+   * report-level `dataFreshness.observedAt` recoverable one level up made
+   * this a minor, not a correctness, gap. Added for consistency: every
+   * Interpretation in one report shares the same `observedAt` (the report's
+   * own generation timestamp — see build-report.ts), since interpretations
+   * are all derived synchronously from one scan, never backfilled later.
+   */
+  observedAt: string;
+  /** Which analysis produced this interpretation — see interpretation-engine.ts's two builder functions. */
+  source: "relationship_analysis" | "contract_risk_analysis";
 }
 
 export interface DataQuality {

@@ -36,6 +36,20 @@ export class InMemoryHistoryStore implements HistoryStore {
     this.scansByToken.set(key, existing);
   }
 
+  /**
+   * REAL WORLD DEPLOYMENT MASTERPLUS audit fix (2026-09-16): this was `t <
+   * beforeMs` (strict less-than) and lost a genuinely-prior scan whenever
+   * two requests for the same token landed in the same millisecond — real,
+   * reproducible via `apps/api/test/report.route.test.ts`'s back-to-back
+   * `app.inject()` calls, not a flaky test. `capturedAt` (see
+   * apps/api/src/pipeline.ts) has only millisecond resolution, so two
+   * distinct, sequential HTTP requests can share an identical timestamp.
+   * `<=` is safe here specifically because the call site
+   * (apps/api/src/routes/report.ts) always calls `getPreviousSnapshot`
+   * BEFORE `recordScan` for the *current* scan — the scan being looked up
+   * for can never itself be in `scans` yet, so there is no risk of a scan
+   * matching (or ranking equal to) itself.
+   */
   async getPreviousSnapshot(token: TokenIdentity, before: string): Promise<ScanRecord | undefined> {
     const key = tokenKey(token);
     const scans = this.scansByToken.get(key) ?? [];
@@ -43,7 +57,7 @@ export class InMemoryHistoryStore implements HistoryStore {
     let latest: ScanRecord | undefined;
     for (const scan of scans) {
       const t = Date.parse(scan.snapshot.capturedAt);
-      if (t < beforeMs && (!latest || t > Date.parse(latest.snapshot.capturedAt))) {
+      if (t <= beforeMs && (!latest || t > Date.parse(latest.snapshot.capturedAt))) {
         latest = scan;
       }
     }

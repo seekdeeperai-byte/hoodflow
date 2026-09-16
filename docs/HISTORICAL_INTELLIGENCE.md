@@ -7,6 +7,23 @@ docs/INTELLIGENCE_ENGINE.md for how this slots into the rest of the
 pipeline and docs/HISTORY_SCHEMA.md for the underlying HistoryStore this
 builds on (unchanged this phase).
 
+**Bug fixed (HOODFLOW MASTERPLUS audit, 2026-09-16):** both
+`InMemoryHistoryStore.getPreviousSnapshot` and `PostgresHistoryStore.getPreviousSnapshot`
+used a strict `<` comparison against `capturedAt`, which has only
+millisecond resolution. Two real, sequential (not concurrent) scans of the
+same token landing in the same millisecond would silently lose the earlier
+scan for comparison purposes — the second scan would incorrectly report
+`INSUFFICIENT_HISTORY` instead of a real `COMPARABLE` delta, degrading
+"What Changed" from its intended behavior. Found via a real, previously
+passing-by-coincidence test (`apps/api/test/report.route.test.ts`'s
+back-to-back `app.inject()` calls) that started failing once traffic
+patterns shifted, then reproduced deliberately and fixed by switching both
+stores to `<=` — safe because both real call sites (`apps/api/src/routes/report.ts`)
+always look up the previous scan *before* recording the current one, so a
+scan can never match itself. Regression tests:
+`packages/core/test/history-store.test.ts` and
+`apps/api/test/postgres-history-store.test.ts`.
+
 ## Pipeline
 
 ```

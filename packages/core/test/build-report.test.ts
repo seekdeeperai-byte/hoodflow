@@ -193,7 +193,23 @@ describe("buildReport", () => {
     for (const interp of report.interpretations) {
       expect(interp.confidence).toBeTruthy();
       expect(interp.supportingMetrics.length + interp.limitations.length).toBeGreaterThan(0);
+      // MASTERPLUS audit fix: every Interpretation must self-describe its own provenance
+      // (observedAt + source), matching every other relationship/evidence-shaped object
+      // in the report rather than relying only on the report-level timestamp.
+      expect(interp.observedAt).toBe(report.generatedAt);
+      expect(interp.source).toBe("relationship_analysis");
     }
+  });
+
+  it("buildContractInterpretation-derived interpretations are tagged source: contract_risk_analysis and share the report's observedAt", () => {
+    const report = buildReport(
+      snapshot({
+        contract: { state: DataState.AVAILABLE, data: { isOpenSource: false, isMintable: true, isBlacklisted: true } },
+      }),
+    );
+    const contractInterp = report.interpretations.find((i) => i.source === "contract_risk_analysis");
+    expect(contractInterp).toBeDefined();
+    expect(contractInterp?.observedAt).toBe(report.generatedAt);
   });
 
   it("degrades gracefully with PARTIAL liquidity data instead of crashing", () => {

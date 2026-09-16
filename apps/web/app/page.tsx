@@ -26,6 +26,23 @@ export default function HomePage() {
         <p style={{ margin: "16px 0 0", color: "var(--text-faint)", fontSize: 12, letterSpacing: "0.04em", textTransform: "uppercase" }}>
           Scan → Analyze → Compare → Interpret → Monitor
         </p>
+        {/*
+         * First-time-user explainer (HOODFLOW MASTERPLUS audit, 2026-09-16):
+         * the hero above explains WHAT HoodFlow does, but a first-time
+         * visitor skimming for a few seconds had no quick answer to WHY the
+         * product works the way it does — why every report re-scans instead
+         * of just showing a snapshot, why every claim carries a confidence
+         * level, and why "unavailable" shows up constantly instead of being
+         * hidden. Those ideas were previously only discoverable by reading
+         * the full demo report closely. This is the minimal addition that
+         * closes that gap without adding a new section/component.
+         */}
+        <p style={{ margin: "10px 0 0", color: "var(--text-dim)", fontSize: 13, maxWidth: 640, lineHeight: 1.5 }}>
+          Every report compares against HoodFlow&apos;s own prior scans of the same token, not just a single
+          snapshot — so &quot;what changed&quot; means something. Every conclusion is labeled with how confident it
+          is and where the evidence came from. When something shows as unavailable, that&apos;s not a red flag —
+          it just means the data couldn&apos;t be confirmed yet, and HoodFlow says so rather than guessing.
+        </p>
       </section>
 
       <SearchBar />

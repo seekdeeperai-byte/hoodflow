@@ -26,7 +26,7 @@ describe("InMemoryHistoryStore", () => {
     expect(prev).toBeUndefined();
   });
 
-  it("returns the most recent scan strictly before the given time", async () => {
+  it("returns the most recent scan at or before the given time", async () => {
     const store = new InMemoryHistoryStore();
     const s1 = snapshotAt("2026-09-14T10:00:00.000Z", 1000);
     const s2 = snapshotAt("2026-09-14T11:00:00.000Z", 1100);
@@ -40,6 +40,31 @@ describe("InMemoryHistoryStore", () => {
 
     const midway = await store.getPreviousSnapshot(TOKEN, "2026-09-14T10:30:00.000Z");
     expect(midway?.snapshot.capturedAt).toBe("2026-09-14T10:00:00.000Z");
+  });
+
+  // Regression test for a real bug found during the HOODFLOW MASTERPLUS audit
+  // (2026-09-16): capturedAt has only millisecond resolution
+  // (Date#toISOString), so two distinct, sequential requests for the same
+  // token can land in the same millisecond. getPreviousSnapshot used to
+  // compare with strict `<`, so the second request's lookup would silently
+  // miss the first request's already-recorded scan and report
+  // INSUFFICIENT_HISTORY instead of a real comparison — a genuine
+  // product-correctness bug in the "What Changed" feature, not test
+  // flakiness. This is safe as `<=` specifically because the real call site
+  // (apps/api/src/routes/report.ts) always looks up the previous scan BEFORE
+  // recording the current one, so a scan can never match itself.
+  it("treats a scan recorded at exactly the same millisecond as 'before' as a real previous scan, not a missing one", async () => {
+    const store = new InMemoryHistoryStore();
+    const sharedTimestamp = "2026-09-14T10:00:00.000Z";
+    const s1 = snapshotAt(sharedTimestamp, 1000);
+    await store.recordScan({ snapshot: s1, report: buildReport(s1) });
+
+    // Simulates a second, later HTTP request whose own capturedAt happens to
+    // collide with the first scan's timestamp down to the millisecond.
+    const previous = await store.getPreviousSnapshot(TOKEN, sharedTimestamp);
+    expect(previous).toBeDefined();
+    expect(previous?.snapshot.capturedAt).toBe(sharedTimestamp);
+    expect(previous?.snapshot.holders.data?.holderCount).toBe(1000);
   });
 
   it("keeps different tokens' histories separate", async () => {

@@ -99,8 +99,8 @@ export function buildReport(snapshot: TokenSnapshot, options: BuildReportOptions
   // see docs/IDENTITY_RESOLUTION.md.
   const relationships = detectRelationships(signals);
   const evidence = buildEvidence(relationships, signals);
-  const interpretations = buildInterpretations(relationships, evidence);
-  const contractInterpretation = buildContractInterpretation(signals);
+  const interpretations = buildInterpretations(relationships, evidence, snapshot.capturedAt);
+  const contractInterpretation = buildContractInterpretation(signals, snapshot.capturedAt);
   if (contractInterpretation) interpretations.unshift(contractInterpretation);
 
   const marketState = selectMarketState(signals, relationships);

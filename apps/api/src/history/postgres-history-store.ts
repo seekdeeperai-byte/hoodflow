@@ -60,9 +60,15 @@ export class PostgresHistoryStore implements HistoryStore {
 
   async getPreviousSnapshot(token: TokenIdentity, before: string): Promise<ScanRecord | undefined> {
     await this.ensureSchema();
+    // `<=`, not `<` — see the identical fix + rationale in InMemoryHistoryStore's
+    // getPreviousSnapshot (packages/core/src/history/in-memory-history-store.ts).
+    // `capturedAt` has only millisecond resolution (JS `Date#toISOString`), so two
+    // distinct, sequential HTTP requests for the same token can share an identical
+    // timestamp; `<=` is safe because the route always calls getPreviousSnapshot
+    // for a scan BEFORE that same scan's own recordScan — it can never match itself.
     const res = await this.pool.query<{ scan_record: ScanRecord }>(
       `SELECT scan_record FROM hoodflow_scans
-       WHERE chain_id = $1 AND address = $2 AND captured_at < $3
+       WHERE chain_id = $1 AND address = $2 AND captured_at <= $3
        ORDER BY captured_at DESC LIMIT 1`,
       [token.chainId, token.address.toLowerCase(), before],
     );

@@ -40,6 +40,16 @@ describe.skipIf(!DATABASE_URL)("PostgresHistoryStore (real Postgres integration)
   });
 
   afterAll(async () => {
+    // Real cleanup, not just of the connection: this test's last-run inserted rows
+    // (some deliberately malformed/incomplete, e.g. the round-trip and durability
+    // tests) must never linger in a shared local DATABASE_URL past this suite — a
+    // real HOODFLOW MASTERPLUS finding was exactly this: leftover fixture rows from
+    // this file crashed the real running server's /v1/pulse endpoint (see
+    // packages/core/src/pulse/pulse-engine.ts's scanEvents() fix + regression test)
+    // when a developer pointed a manual `pnpm --filter @hoodflow/api run start` at
+    // the same database used for `pnpm test`. Truncate before closing the pool.
+    const pool = (store as unknown as { pool: { query: (sql: string) => Promise<unknown> } }).pool;
+    await pool.query("TRUNCATE TABLE hoodflow_scans").catch(() => {});
     await store.close();
   });
 
@@ -62,6 +72,21 @@ describe.skipIf(!DATABASE_URL)("PostgresHistoryStore (real Postgres integration)
     expect(previous).toBeDefined();
     expect(previous!.snapshot.capturedAt).toBe(t1);
     expect(previous!.snapshot.token.address).toBe("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+  });
+
+  // Regression test for the same real bug fixed in InMemoryHistoryStore (see
+  // packages/core/test/history-store.test.ts) — the SQL query used strict `<`
+  // on captured_at, so two requests colliding on the same millisecond would
+  // silently lose the previous scan. Safe as `<=` because the real call site
+  // always looks up the previous scan before recording the current one.
+  it("treats a scan recorded at exactly the same millisecond as 'before' as a real previous scan, not a missing one", async () => {
+    const sharedTimestamp = "2026-09-16T14:00:00.000Z";
+    const snapshot = makeSnapshot({ capturedAt: sharedTimestamp, address: "0x4444444444444444444444444444444444444d" });
+    await store.recordScan({ snapshot, report: fakeReport });
+
+    const previous = await store.getPreviousSnapshot(snapshot.token, sharedTimestamp);
+    expect(previous).toBeDefined();
+    expect(previous?.snapshot.capturedAt).toBe(sharedTimestamp);
   });
 
   it("returns undefined for getPreviousSnapshot when no prior scan exists", async () => {

@@ -366,6 +366,8 @@ export const DEMO_REPORT: HoodflowReport = {
       confidence: Confidence.MEDIUM,
       limitations: [],
       whatWouldChangeAssessment: ["A drop in buy/sell ratio or liquidity failing to keep pace would weaken this read."],
+      observedAt: NOW,
+      source: "relationship_analysis",
     },
   ],
   hype: {

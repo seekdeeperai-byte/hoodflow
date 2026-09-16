@@ -64,11 +64,31 @@ function dimension(
   };
 }
 
+/**
+ * Defensive accessor (HOODFLOW MASTERPLUS audit, 2026-09-16): a real, if
+ * rare, production condition is a stored `ScanRecord` whose `report` is
+ * malformed, from a schema predating some field, or otherwise not a
+ * well-formed `HoodflowReport` — e.g. a HistoryStore implementation that
+ * doesn't validate on read, or (as this fix was discovered) a locally
+ * seeded/imported test record. Pulse aggregates across *every* token this
+ * build has scanned; a single bad record must not throw an uncaught
+ * exception and 500 the entire chain-level endpoint for every other,
+ * perfectly good token. Treating an unreadable record's event contribution
+ * as zero is the honest choice here — it's the same "missing != zero"
+ * principle applied one level down: zero *events counted from this record*
+ * is not the same claim as zero events happened, and this scan's other
+ * dimensions (which don't touch `.events`) are unaffected.
+ */
+function scanEvents(scan: ScanRecord): { eventType: string }[] {
+  const events = scan.report?.events?.events;
+  return Array.isArray(events) ? events : [];
+}
+
 function countEventType(latest: ScanRecord[], eventType: string): { count: number; addresses: string[] } {
   const addresses: string[] = [];
   let count = 0;
   for (const scan of latest) {
-    const matches = scan.report.events.events.filter((e) => e.eventType === eventType);
+    const matches = scanEvents(scan).filter((e) => e.eventType === eventType);
     if (matches.length > 0) {
       count += matches.length;
       addresses.push(scan.snapshot.token.address);
@@ -143,7 +163,9 @@ export function buildEcosystemPulse(input: {
   }));
 
   const identityDim = dimension("identityCoverage", "Identity-confirmed vs. unresolved entities", trackedTokenCount, () => {
-    const confirmed = latest.filter((s) => s.report.identity.status === IdentityStatus.CONFIRMED).length;
+    // Optional chaining: see scanEvents()'s doc comment above — a malformed/legacy stored
+    // record must not crash Pulse for every other token; it simply doesn't count here.
+    const confirmed = latest.filter((s) => s.report?.identity?.status === IdentityStatus.CONFIRMED).length;
     const unresolved = trackedTokenCount - confirmed;
     return {
       observationCount: trackedTokenCount,
@@ -156,7 +178,7 @@ export function buildEcosystemPulse(input: {
   });
 
   const contractRiskDim = dimension("contractRiskDistribution", "Contract-risk market-state distribution", trackedTokenCount, () => {
-    const atRisk = latest.filter((s) => s.report.marketState.state === "CONTRACT_RISK").length;
+    const atRisk = latest.filter((s) => s.report?.marketState?.state === "CONTRACT_RISK").length;
     return {
       observationCount: trackedTokenCount,
       value: atRisk,
@@ -168,8 +190,8 @@ export function buildEcosystemPulse(input: {
   });
 
   const externalAttentionDim = dimension("externalAttention", "External attention coverage", trackedTokenCount, () => {
-    const socialUsable = latest.filter((s) => isUsable(s.report.dataQuality.social)).length;
-    const newsUsable = latest.filter((s) => isUsable(s.report.dataQuality.news)).length;
+    const socialUsable = latest.filter((s) => s.report?.dataQuality && isUsable(s.report.dataQuality.social)).length;
+    const newsUsable = latest.filter((s) => s.report?.dataQuality && isUsable(s.report.dataQuality.news)).length;
     return {
       observationCount: socialUsable + newsUsable,
       confidence: socialUsable + newsUsable > 0 ? Confidence.LOW : null,
@@ -190,10 +212,10 @@ export function buildEcosystemPulse(input: {
     details: [],
   }));
 
-  const totalEvents = latest.reduce((sum, s) => sum + s.report.events.events.length, 0);
+  const totalEvents = latest.reduce((sum, s) => sum + scanEvents(s).length, 0);
   const eventTypeCounts = new Map<string, { count: number; addresses: string[] }>();
   for (const scan of latest) {
-    for (const event of scan.report.events.events) {
+    for (const event of scanEvents(scan)) {
       const entry = eventTypeCounts.get(event.eventType) ?? { count: 0, addresses: [] };
       entry.count++;
       if (!entry.addresses.includes(scan.snapshot.token.address)) entry.addresses.push(scan.snapshot.token.address);
