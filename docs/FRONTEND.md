@@ -1,6 +1,8 @@
 # HOODFLOW — Frontend (Phase 8)
 
-Status: implemented this phase, as a presentation layer only. Turns the
+Status: implemented Phase 8, extended in the FINAL GAP CLOSURE phase
+(2026-09-16) — see "FINAL GAP CLOSURE phase additions" below for exactly
+what changed. Turns the
 existing `HoodflowReport` (built by `packages/core/src/report/build-report.ts`,
 through Phase 6's historical intelligence, served by `apps/api`) into a
 product surface, without changing anything in `packages/core`,
@@ -181,14 +183,74 @@ logic, identity resolution, and historical intelligence logic are all
 exactly as Phase 5/6 left them (`pnpm -w test` — 192/192 passing, no
 existing test file modified).
 
+## FINAL GAP CLOSURE phase additions (2026-09-16)
+
+Additive, following the same "presentation layer only, one component per
+real report field" convention as Phase 8. Nothing in the sections above was
+removed or restructured; this section documents what's new.
+
+```
+apps/web/
+  app/pulse/[chainId]/page.tsx   NEW — Robinhood Ecosystem Pulse route (client component)
+  components/IntelligenceEvents.tsx     NEW — report.events (IntelligenceEventFeed)
+  components/EcosystemIntelligence.tsx  NEW — report.ecosystem (EcosystemIntelligence)
+  components/EcosystemPulse.tsx         NEW — EcosystemPulse (chain-level, fetched separately)
+  lib/api.ts                     fetchPulse() + PulseRequestState added, same pattern as fetchReport()
+  lib/format.ts                  truncateId() added — see "Mobile-overflow fix" below
+  lib/sample-report.ts           DEMO_REPORT extended: relationshipGraph/events/ecosystem now computed
+                                  by calling the real buildEcosystemIntelligence/buildIntelligenceEvents/
+                                  buildRelationshipGraph functions against this file's existing
+                                  hand-authored signals/history/crossSource — not hand-approximated
+```
+
+`components/ReportView.tsx` now assembles 11 sections (the original 9 IA
+layers plus Intelligence Events and Ecosystem Intelligence, placed after
+Cross-Source Intelligence and before the final Interpretations/Monitoring
+synthesis layers, matching the product-integration order: Token Intelligence
+→ Intelligence Events / Ecosystem Intelligence / Robinhood Ecosystem Pulse).
+Robinhood Ecosystem Pulse is deliberately **not** a `ReportView` section —
+it's chain-level, not token-level, so it gets its own route
+(`/pulse/[chainId]`) and its own fetch (`fetchPulse`, re-run whenever the
+time-window selector changes, since the window is a real backend query
+parameter). The home page links to `/pulse/4663`.
+
+Both new report-level components follow every existing convention
+unchanged: `DataUnavailable` (never a blank section) when the feed/graph is
+empty, badges limited to `accent`/`neutral`/`unavailable` tones for events
+specifically (never `positive`/`negative`, which this app reserves for
+literal measured up/down deltas — an Intelligence Event is never framed as
+bullish or bearish), and every string rendered as plain JSX text.
+
+### Mobile-overflow fix found during this phase's browser QA
+
+`EcosystemIntelligence.tsx`'s first version rendered full 42-character
+addresses inside `Badge` components (`white-space: nowrap` in
+`ui.module.css`), overflowing a 390px mobile viewport. Fixed with a new
+`lib/format.ts` helper, `truncateId(value, headLength, tailLength)`
+(`"0x0000000000...000000000000de9"` style, e.g. `0x00000000…000de9`),
+applied everywhere an entity id/address is rendered inside a badge or a
+tight flex row across `IntelligenceEvents.tsx`, `EcosystemIntelligence.tsx`,
+and `EcosystemPulse.tsx` — the full value is preserved in a `title`
+attribute, never dropped. Re-verified with a real headless-Chromium pass
+(desktop 1280px + mobile 390px, light + dark `prefers-color-scheme`)
+against the home page (`DEMO_REPORT`), a live report page, and the Pulse
+page: zero horizontal overflow, zero console errors, on every combination
+checked. This is the first real-browser verification pass this frontend has
+had recorded in this doc since Phase 8 — see docs/SECURITY.md's FINAL GAP
+CLOSURE recheck for the full methodology.
+
 ## Known limitations (honest, not deferred silently)
 
-- **Not visually verified in a browser.** This sandbox has no browser
-  automation available for a Next.js dev/prod server; correctness here
-  was validated via `tsc --noEmit`, `next build`'s own type/lint pass, and
-  unit tests of every pure formatting/labeling function — not a rendered
-  screenshot. Treat the visual layout as unverified until it's opened in
-  an actual browser.
+- **Visually verified in a browser as of the FINAL GAP CLOSURE phase, but
+  not exhaustively.** A real headless-Chromium pass (see "FINAL GAP CLOSURE
+  phase additions" above) checked the home page, a live report page, and
+  the new Pulse page at desktop + mobile widths in light + dark mode — zero
+  overflow, zero console errors, one real defect found and fixed. It did
+  **not** check every DataState combination (e.g. `RATE_LIMITED`,
+  `PARTIAL` per-domain states) or every existing pre-Phase-8.1 component in
+  isolation; those remain validated via `tsc --noEmit`, `next build`'s own
+  type/lint pass, and unit tests of pure formatting/labeling functions only,
+  same as before.
 - **No component-level UI tests** (jsdom/React Testing Library) were
   added, to avoid touching the shared root `vitest.config.ts`
   (`environment: "node"`) that all 159 pre-existing backend tests rely on;

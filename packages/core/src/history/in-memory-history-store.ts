@@ -57,6 +57,19 @@ export class InMemoryHistoryStore implements HistoryStore {
     return scans.filter((s) => Date.parse(s.snapshot.capturedAt) >= sinceMs);
   }
 
+  async getAllScansSince(chainId: number, since: string): Promise<ScanRecord[]> {
+    const sinceMs = Date.parse(since);
+    const results: ScanRecord[] = [];
+    for (const [key, scans] of this.scansByToken) {
+      if (!key.startsWith(`${chainId}:`)) continue;
+      for (const scan of scans) {
+        if (Date.parse(scan.snapshot.capturedAt) >= sinceMs) results.push(scan);
+      }
+    }
+    results.sort((a, b) => Date.parse(a.snapshot.capturedAt) - Date.parse(b.snapshot.capturedAt));
+    return results;
+  }
+
   /** Test/debug helper only — not part of the HistoryStore interface. */
   clear(): void {
     this.scansByToken.clear();

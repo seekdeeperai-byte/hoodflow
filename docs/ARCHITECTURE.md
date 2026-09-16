@@ -1,7 +1,7 @@
 # HOODFLOW — Architecture
 
-Status: Phase 0–11 + Final Intelligence Completion phase. Last updated
-2026-09-15.
+Status: Phase 0–11 + Final Intelligence Completion phase + FINAL GAP CLOSURE
+phase. Last updated 2026-09-16.
 
 ## 1. Discovery findings (Phase 0)
 
@@ -158,8 +158,13 @@ Historical Intelligence (Phase 6)          [core/historical]  (reads HistoryStor
 Attention/Hype Engine (Final phase)        [core/attention]  (reads Social + News summaries)
 Cross-Source Engine (Final phase)          [core/cross-source]  (reads on-chain trend + Social + News + Attention)
 Integrated Interpretation (Final phase)    [core/interpretation/integrated-interpretation]
+Ecosystem Intelligence (FINAL GAP CLOSURE) [core/ecosystem]  (reads Contract + Liquidity, no new provider calls)
+Intelligence Events (FINAL GAP CLOSURE)    [core/events]  (reads History + Signals + CrossSource + Ecosystem, no new provider calls)
+Canonical Relationship Graph (FINAL GAP CLOSURE) [core/relationships/canonical]  (adapts Relationship + TemporalRelationship + CrossSourceRelationship; combines with Ecosystem + Event relationships)
 HOODFLOW Report                            [core/report]
    -> Fastify route GET /v1/report/:chainId/:address
+Robinhood Ecosystem Pulse (FINAL GAP CLOSURE) [core/pulse]  (reads HistoryStore.getAllScansSince — chain-level, additive, separate from the per-token report above)
+   -> Fastify route GET /v1/pulse/:chainId
 ```
 
 **Final Intelligence Completion phase (2026-09-15)** added the Social/News
@@ -213,6 +218,81 @@ not-yet-implemented were built in the Final Intelligence Completion phase
 docs/HYPE_ATTENTION.md, docs/CROSS_SOURCE_INTELLIGENCE.md). A
 Postgres-backed `HistoryStore` (replacing the Phase 4 in-memory
 implementation, still used as-is) is also not yet built.
+
+## 4a. Canonical Relationship Model (FINAL GAP CLOSURE phase — architecture correction)
+
+A prior phase's Cross-Source Intelligence (§4's `core/cross-source`) was
+flagged as a critical architecture defect: it was a structurally
+incompatible **third relationship-producing engine**, alongside
+`core/relationships/relationship-engine.ts` (same-snapshot Signal
+combinations) and `core/historical/temporal-relationship-engine.ts`
+(cross-scan Trend combinations) — each with its own output shape, no shared
+envelope. Adding Ecosystem Intelligence and Intelligence Events on top of
+that pattern without correcting it would have made a fourth and fifth
+incompatible format. This phase corrects that without a destructive rewrite:
+
+- **What did NOT change.** `relationship-engine.ts` (`Relationship`/
+  `RelationshipType`) and `temporal-relationship-engine.ts`
+  (`TemporalRelationship`/`TemporalRelationshipType`) are untouched — same
+  functions, same inputs, same outputs. `HoodflowReport.relationships` and
+  `HoodflowReport.history.relationships` are unchanged fields; every
+  existing consumer/test of those fields keeps working exactly as before.
+- **What changed.** A new, additive adapter layer,
+  `core/relationships/canonical.ts`, wraps each engine's existing output
+  (`fromTokenRelationship`, `fromTemporalRelationship`,
+  `fromCrossSourceRelationship`) into one shared envelope,
+  `CanonicalRelationship` (`core/types/relationship-graph.ts`), which
+  carries a `category` — `TOKEN | TEMPORAL | CROSS_SOURCE | ECOSYSTEM |
+  EVENT` — **relationship categories, not independent engines.** The two
+  new capabilities this phase adds, Ecosystem Intelligence and Intelligence
+  Events, construct `CanonicalRelationship` records natively from day one
+  (`core/ecosystem/ecosystem-engine.ts`, the `ECOSYSTEM_RELATIONSHIP_OBSERVED`
+  event's linkage in `core/events/event-engine.ts`) rather than inventing a
+  sixth incompatible format. `core/relationships/canonical.ts`'s
+  `buildRelationshipGraph()` combines all five categories into one
+  `HoodflowReport.relationshipGraph: RelationshipGraph` (a `generatedAt`, the
+  full `CanonicalRelationship[]`, and `categoryCounts` per category) — a new,
+  additive top-level report field.
+- **Shared primitives, not a parallel scale.** `CanonicalRelationship` reuses
+  the existing `Confidence` (LOW/MEDIUM/HIGH) and `DataState` enums
+  unchanged — there is no second confidence or availability scale to keep in
+  sync.
+- **Entity identity is also shared**, not three ad hoc schemes:
+  `core/types/entities.ts`'s `EntityRef`/`EntityType` and the chain-aware,
+  normalized constructor functions (`tokenEntity`, `deployerEntity`,
+  `tradingPairEntity`, etc.) are the one identity scheme used by the
+  relationship graph, Ecosystem Intelligence, and Intelligence Events alike
+  — this is what prevents the same address on two different chains from ever
+  colliding into one entity (see docs/ECOSYSTEM_INTELLIGENCE.md).
+
+See docs/RELATIONSHIP_ARCHITECTURE.md for the full design doc, and
+`packages/core/test/relationship-graph.test.ts` for the tests proving each
+adapter is lossless and `buildRelationshipGraph()` produces correct,
+deterministic `categoryCounts` across all five categories.
+
+## 4b. Intelligence Events, Ecosystem Intelligence, Robinhood Ecosystem Pulse (FINAL GAP CLOSURE phase)
+
+Three additive capabilities, in the "what changed / what's connected / what's
+happening ecosystem-wide" order the product principle (§14 of the governing
+spec) describes. Each is documented in its own file rather than repeated
+here: docs/INTELLIGENCE_EVENTS.md, docs/ECOSYSTEM_INTELLIGENCE.md,
+docs/ROBINHOOD_ECOSYSTEM_PULSE.md. In one sentence each:
+
+- **Intelligence Events** (`core/events`) — a bounded, deterministic,
+  typed feed answering "what changed?", built entirely from data other
+  engines already computed this scan (history deltas, temporal
+  relationships, signals, cross-source relationships, ecosystem
+  relationships) — zero duplicate analyzers, zero new provider calls.
+- **Ecosystem Intelligence** (`core/ecosystem`) — answers "what is
+  connected to this token?" using only data this pipeline already fetched
+  (GoPlus's `creatorAddress`, DexScreener's `dexId`/`pairAddress`) — zero new
+  provider calls, zero inference from name/symbol/narrative alone.
+- **Robinhood Ecosystem Pulse** (`core/pulse`, `GET /v1/pulse/:chainId`) —
+  the one genuinely chain-level view: aggregates over every token this build
+  has actually scanned on a given chain, via one new `HistoryStore` method
+  (`getAllScansSince`), reusing each token's own already-computed
+  `report.events`/`dataQuality`/`identity`/`marketState` rather than
+  recomputing anything. Additive; never replaces token-level intelligence.
 
 ## 5. Data integrity rules enforced in code
 

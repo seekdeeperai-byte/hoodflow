@@ -64,6 +64,20 @@ export function formatTimestamp(iso: string): string {
   });
 }
 
+/**
+ * Shortens a long identifier (a contract address, a deployer address, an
+ * ecosystem entity id) for display inside space-constrained UI like a badge.
+ * Never used for the authoritative on-chain identifier shown elsewhere (see
+ * TokenIdentityCard.tsx, which renders the full address) — this is display
+ * truncation only. Found in real-browser QA: a full 42-character address
+ * inside a `white-space: nowrap` badge overflows the viewport on mobile
+ * (see ui.module.css's `.badge`).
+ */
+export function truncateId(value: string, headLength = 10, tailLength = 6): string {
+  if (value.length <= headLength + tailLength + 1) return value;
+  return `${value.slice(0, headLength)}…${value.slice(-tailLength)}`;
+}
+
 export function formatRelativeAge(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) return "unknown age";
   const seconds = Math.round(ms / 1000);

@@ -242,5 +242,27 @@ export interface HoodflowReport {
    * never a trade recommendation. See types/cross-source.ts.
    */
   integratedInterpretation: import("./cross-source.js").IntegratedInterpretation;
+  /**
+   * Canonical Relationship Model (FINAL GAP CLOSURE phase — architecture
+   * correction). ADDITIVE — `relationships` (TOKEN category) and
+   * `history.relationships` (TEMPORAL category) above are UNCHANGED in
+   * shape and behavior; this is every relationship this report produced
+   * (TOKEN + TEMPORAL + CROSS_SOURCE + ECOSYSTEM + EVENT), re-expressed in
+   * one shared envelope. See types/relationship-graph.ts and
+   * relationships/canonical.ts.
+   */
+  relationshipGraph: import("./relationship-graph.js").RelationshipGraph;
+  /**
+   * Intelligence Events (FINAL GAP CLOSURE phase §4) — "what changed?" as a
+   * first-class, typed, deterministic feed derived from data already
+   * present elsewhere on this report. See types/events.ts and
+   * events/event-engine.ts.
+   */
+  events: import("./events.js").IntelligenceEventFeed;
+  /**
+   * Ecosystem Intelligence (FINAL GAP CLOSURE phase §5) — "what is connected
+   * to this token?" See types/ecosystem.ts and ecosystem/ecosystem-engine.ts.
+   */
+  ecosystem: import("./ecosystem.js").EcosystemIntelligence;
   limitations: string[];
 }

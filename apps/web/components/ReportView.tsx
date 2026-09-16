@@ -11,6 +11,8 @@ import { SocialIntelligence } from "./SocialIntelligence";
 import { NewsIntelligence } from "./NewsIntelligence";
 import { Attention } from "./Attention";
 import { CrossSourceIntelligence } from "./CrossSourceIntelligence";
+import { IntelligenceEvents } from "./IntelligenceEvents";
+import { EcosystemIntelligence } from "./EcosystemIntelligence";
 import { Interpretations } from "./Interpretations";
 import { Monitoring } from "./Monitoring";
 
@@ -37,6 +39,8 @@ export function ReportView({ report, mode }: { report: HoodflowReport; mode: "de
       <NewsIntelligence report={report} />
       <Attention report={report} />
       <CrossSourceIntelligence report={report} />
+      <IntelligenceEvents report={report} />
+      <EcosystemIntelligence report={report} />
       <Interpretations report={report} />
       <Monitoring report={report} />
     </div>

@@ -5,3 +5,8 @@ export * from "./history.js";
 export * from "./intelligence.js";
 export * from "./social-news.js";
 export * from "./cross-source.js";
+export * from "./entities.js";
+export * from "./relationship-graph.js";
+export * from "./events.js";
+export * from "./ecosystem.js";
+export * from "./pulse.js";

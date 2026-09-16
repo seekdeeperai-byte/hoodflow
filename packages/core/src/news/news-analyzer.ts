@@ -88,7 +88,7 @@ function windowHours(start: string | undefined, end: string | undefined): number
 export function analyzeNews(
   observations: NewsObservation[] | undefined,
   dataState: DataState,
-  options: { now?: string } = {},
+  options: { now?: string; previousSummary?: NewsSummary } = {},
 ): { summary: NewsSummary; signals: Signal[] } {
   const now = options.now ?? new Date().toISOString();
 
@@ -124,6 +124,11 @@ export function analyzeNews(
   const hrs = windowHours(observationWindowStart, observationWindowEnd);
   const coverageVelocity = hrs !== undefined && storyGroups.length > 0 ? storyGroups.length / hrs : undefined;
 
+  const coverageVelocityChange =
+    coverageVelocity !== undefined && options.previousSummary?.coverageVelocity !== undefined
+      ? coverageVelocity - options.previousSummary.coverageVelocity
+      : undefined;
+
   const syndicatedGroups = storyGroups.filter((g) => g.memberCount > 1);
   if (syndicatedGroups.length > 0) {
     limitations.push(
@@ -142,6 +147,7 @@ export function analyzeNews(
     storyCount: storyGroups.length,
     storyGroups,
     coverageVelocity,
+    coverageVelocityChange,
     limitations,
   };
 
@@ -158,6 +164,26 @@ export function analyzeNews(
       }.`,
       timestamp: now,
     });
+  }
+
+  // NEWS_COVERAGE_ACCELERATION: typed since the Final Intelligence Completion phase but
+  // never actually emitted until this phase — mirrors SOCIAL_ATTENTION_ACCELERATION's exact
+  // gating (>=20% relative change vs. the previous scan's coverageVelocity, and only when
+  // that previous velocity was itself positive, so a 0 -> 0.1 jump isn't reported as a
+  // meaningless "infinite%" acceleration).
+  if (coverageVelocityChange !== undefined && options.previousSummary?.coverageVelocity !== undefined && options.previousSummary.coverageVelocity > 0) {
+    const pctChange = (coverageVelocityChange / options.previousSummary.coverageVelocity) * 100;
+    if (Math.abs(pctChange) >= 20) {
+      signals.push({
+        signalType: SignalType.NEWS_COVERAGE_ACCELERATION,
+        direction: Direction.NEUTRAL,
+        strength: Math.abs(pctChange) >= 100 ? Strength.HIGH : Strength.MEDIUM,
+        confidence: Confidence.MEDIUM,
+        source: "news",
+        evidence: `News coverage velocity moved from ${options.previousSummary.coverageVelocity.toFixed(2)} stories/hr to ${coverageVelocity!.toFixed(2)} stories/hr since the previous scan (${pctChange >= 0 ? "+" : ""}${pctChange.toFixed(0)}%).`,
+        timestamp: now,
+      });
+    }
   }
 
   return { summary, signals };

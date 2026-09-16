@@ -4,6 +4,7 @@ import { InMemoryHistoryStore, type HistoryStore } from "@hoodflow/core";
 import type { Config } from "./config.js";
 import type { PipelineDeps } from "./pipeline.js";
 import { registerReportRoute } from "./routes/report.js";
+import { registerPulseRoute } from "./routes/pulse.js";
 
 export async function buildApp(
   config: Config,
@@ -23,6 +24,7 @@ export async function buildApp(
   app.get("/healthz", async () => ({ status: "ok" }));
 
   registerReportRoute(app, deps, historyStore);
+  registerPulseRoute(app, historyStore);
 
   // Centralized error handler: never leak stack traces or internal error
   // messages to the client, and never log secrets (config isn't logged at all).

@@ -13,8 +13,37 @@ trade recommendation. See `docs/` for the full picture; start with
 
 ## Status
 
-**Final Intelligence Completion phase (2026-09-15) — the last planned
-development phase for this build.** On top of everything through Phase 11
+**FINAL GAP CLOSURE phase (2026-09-16).** On top of the Final Intelligence
+Completion phase below, this corrective phase closed a flagged architecture
+defect and three product-completeness gaps:
+
+- **Canonical Relationship Model** — corrected Cross-Source Intelligence's
+  status as a structurally incompatible *third* relationship engine.
+  `relationship-engine.ts`/`temporal-relationship-engine.ts` are unchanged;
+  their output, plus Cross-Source/Ecosystem/Event relationships, now share
+  one envelope (`HoodflowReport.relationshipGraph`) across five categories.
+  See `docs/RELATIONSHIP_ARCHITECTURE.md`.
+- **Intelligence Events** — a bounded, deterministic "what changed?" feed
+  (`HoodflowReport.events`), built entirely from data other engines already
+  computed. See `docs/INTELLIGENCE_EVENTS.md`.
+- **Ecosystem Intelligence** — "what is connected to this token?"
+  (`HoodflowReport.ecosystem`), built from data already fetched (GoPlus
+  creator address, DexScreener dex/pair), zero new provider calls. See
+  `docs/ECOSYSTEM_INTELLIGENCE.md`.
+- **Robinhood Ecosystem Pulse** — the first genuinely chain-level view
+  (`GET /v1/pulse/:chainId`), aggregating over every token actually scanned.
+  See `docs/ROBINHOOD_ECOSYSTEM_PULSE.md`.
+
+All four are additive — every pre-existing report field, route, and
+frontend section is unchanged in shape and behavior (277 pre-existing tests
+pass unmodified, plus 37 new tests this phase — 314 total). Three new/
+updated frontend sections (`IntelligenceEvents.tsx`,
+`EcosystemIntelligence.tsx`, a new `/pulse/[chainId]` page) were verified
+with a real headless-browser pass (desktop + mobile, light + dark); one real
+mobile-overflow defect was found and fixed during that pass (see
+`docs/SECURITY.md`).
+
+**Final Intelligence Completion phase (2026-09-15).** On top of everything through Phase 11
 (research, monorepo foundation, the GoPlus/DexScreener/Blockscout provider
 layer, the core intelligence pipeline, identity resolution, historical
 intelligence + temporal relationships, a Next.js frontend QA'd in a real
@@ -55,7 +84,7 @@ in-memory history. See `docs/ROADMAP.md`.
 ## Layout
 
 ```
-apps/api             Fastify API — GET /v1/report/:chainId/:address, GET /healthz
+apps/api             Fastify API — GET /v1/report/:chainId/:address, GET /v1/pulse/:chainId, GET /healthz
 apps/web              Next.js frontend — presentation layer over HoodflowReport (see docs/FRONTEND.md)
 packages/core         Pure, dependency-free intelligence engine (no I/O)
 packages/providers     GoPlus / DexScreener / Blockscout / GDELT / X clients + zod validation
@@ -67,7 +96,7 @@ docs/                  Architecture, data sources, scoring, security, roadmap
 ```bash
 pnpm install
 pnpm -r run build
-pnpm test              # 277 tests, all fixture-backed (see docs/ARCHITECTURE.md §2)
+pnpm test              # 314 tests, all fixture-backed (see docs/ARCHITECTURE.md §2)
 cp apps/api/.env.example apps/api/.env   # optional: GOPLUS_API_KEY / BLOCKSCOUT_API_KEY / X_BEARER_TOKEN
 cp apps/web/.env.example apps/web/.env.local   # optional: HOODFLOW_API_BASE_URL (defaults to localhost:8787)
 pnpm --filter @hoodflow/api run start    # after build, or `run dev` for tsx watch mode
@@ -84,7 +113,7 @@ provider clients' own HTTP calls (Node `fetch`, and plain `curl`) still
 cannot reach GoPlus/DexScreener/Blockscout **or the two new providers,
 GDELT and X**, from here (see `docs/ARCHITECTURE.md` §2), re-confirmed as
 recently as this final phase (2026-09-15) with fresh proxy-log evidence for
-all five hosts. All 277 tests run against realistic fixtures, not live
+all five hosts. All 314 tests run against realistic fixtures, not live
 traffic. GoPlus and DexScreener's real API *shape* has been confirmed via a
 separate, policy-trusted fetch path available only to this session (not
 the repo's own client code, and not sufficient proof on its own — Phase 10

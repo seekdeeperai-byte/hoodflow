@@ -1,3 +1,4 @@
+import type { EcosystemPulse, PulseWindow } from "@hoodflow/core";
 import type { HoodflowReport } from "@hoodflow/core";
 
 /**
@@ -57,6 +58,56 @@ export async function fetchReport(chainId: string, address: string): Promise<Rep
     // (packages/core's own tests already prove this shape; duplicating that check here would
     // be exactly the "recomputing intelligence in the frontend" this app is built to avoid).
     return { status: "success", report: body as HoodflowReport };
+  }
+
+  const err = body as ApiErrorBody;
+  const message = err.message ?? "The intelligence engine returned an unexpected error.";
+
+  if (response.status === 400) return { status: "invalid_input", message };
+  if (response.status === 404) return { status: "not_found", message };
+  if (response.status === 429) return { status: "rate_limited", message };
+  return { status: "api_error", message };
+}
+
+/**
+ * Robinhood Ecosystem Pulse (FINAL GAP CLOSURE phase §6). Thin client for
+ * `GET /v1/pulse/:chainId` (apps/api/src/routes/pulse.ts) — same relative-path,
+ * same-origin-rewrite pattern as fetchReport above, and the same discriminated
+ * result shape so the pulse page can render loading/success/error states with
+ * the same existing components (LoadingState, RequestStateMessage).
+ */
+export type PulseRequestState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "success"; pulse: EcosystemPulse }
+  | { status: "invalid_input"; message: string }
+  | { status: "not_found"; message: string }
+  | { status: "rate_limited"; message: string }
+  | { status: "api_error"; message: string };
+
+export async function fetchPulse(chainId: string, window: PulseWindow): Promise<PulseRequestState> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/v1/pulse/${encodeURIComponent(chainId)}?window=${encodeURIComponent(window)}`, {
+      headers: { accept: "application/json" },
+      cache: "no-store",
+    });
+  } catch {
+    return {
+      status: "api_error",
+      message: "Could not reach the HoodFlow intelligence engine. The API may be offline or unreachable from this environment.",
+    };
+  }
+
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return { status: "api_error", message: "The intelligence engine returned a response that could not be parsed." };
+  }
+
+  if (response.ok) {
+    return { status: "success", pulse: body as EcosystemPulse };
   }
 
   const err = body as ApiErrorBody;

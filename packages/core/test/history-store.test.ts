@@ -74,4 +74,35 @@ describe("InMemoryHistoryStore", () => {
     const since = await store.getScansSince(TOKEN, "2026-09-14T11:00:00.000Z");
     expect(since.map((s) => s.snapshot.capturedAt)).toEqual(["2026-09-14T11:00:00.000Z", "2026-09-14T12:00:00.000Z"]);
   });
+
+  it("getAllScansSince enumerates every token on a chain, chain-scoped and oldest-first (Robinhood Ecosystem Pulse's own read path)", async () => {
+    const store = new InMemoryHistoryStore();
+    const tokenA = { chainId: 4663, address: "0x1111111111111111111111111111111111111111" };
+    const tokenB = { chainId: 4663, address: "0x2222222222222222222222222222222222222222" };
+    const tokenOtherChain = { chainId: 46630, address: "0x1111111111111111111111111111111111111111" };
+
+    const sA = snapshotAt("2026-09-14T10:00:00.000Z", 1000);
+    const sB = { ...snapshotAt("2026-09-14T11:00:00.000Z", 2000), token: tokenB };
+    const sOther = { ...snapshotAt("2026-09-14T12:00:00.000Z", 3000), token: tokenOtherChain };
+
+    await store.recordScan({ snapshot: sA, report: buildReport(sA) });
+    await store.recordScan({ snapshot: sB, report: buildReport(sB) });
+    await store.recordScan({ snapshot: sOther, report: buildReport(sOther) });
+
+    const chain4663Scans = await store.getAllScansSince(4663, "2026-01-01T00:00:00.000Z");
+    expect(chain4663Scans.map((s) => s.snapshot.token.address)).toEqual(
+      [tokenA.address, tokenB.address].map((a) => a), // both chain-4663 tokens, oldest first
+    );
+    expect(chain4663Scans.every((s) => s.snapshot.token.chainId === 4663)).toBe(true);
+
+    const chain46630Scans = await store.getAllScansSince(46630, "2026-01-01T00:00:00.000Z");
+    expect(chain46630Scans).toHaveLength(1);
+    expect(chain46630Scans[0]?.snapshot.token.chainId).toBe(46630);
+  });
+
+  it("getAllScansSince returns an empty array for a chain with no tracked scans, never fabricating activity", async () => {
+    const store = new InMemoryHistoryStore();
+    const scans = await store.getAllScansSince(4663, "2026-01-01T00:00:00.000Z");
+    expect(scans).toEqual([]);
+  });
 });

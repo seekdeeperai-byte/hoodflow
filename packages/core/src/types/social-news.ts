@@ -123,6 +123,15 @@ export interface NewsSummary {
   storyGroups: NewsStoryGroup[];
   /** Distinct stories per hour over the observation window. */
   coverageVelocity?: number;
+  /**
+   * coverageVelocity minus the previous scan's coverageVelocity, only when a
+   * previous scan's summary exists (FINAL GAP CLOSURE phase — wires up the
+   * `NEWS_COVERAGE_ACCELERATION` SignalType that existed since the Final
+   * Intelligence Completion phase but was never actually emitted; see
+   * news/news-analyzer.ts and docs/INTELLIGENCE_EVENTS.md). Same convention
+   * as `SocialSummary.mentionVelocityChange`.
+   */
+  coverageVelocityChange?: number;
   limitations: string[];
 }
 

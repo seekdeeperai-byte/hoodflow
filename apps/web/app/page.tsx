@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SearchBar } from "../components/SearchBar";
 import { ReportView } from "../components/ReportView";
 import { DEMO_REPORT } from "../lib/sample-report";
@@ -28,6 +29,10 @@ export default function HomePage() {
       </section>
 
       <SearchBar />
+
+      <Link href="/pulse/4663" style={{ fontSize: 13, color: "var(--accent)" }}>
+        View Robinhood Ecosystem Pulse &rarr;
+      </Link>
 
       <section>
         <h2 style={{ fontSize: 13, fontWeight: 600, color: "var(--text-dim)", textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 12px" }}>

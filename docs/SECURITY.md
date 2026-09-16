@@ -1,8 +1,122 @@
 # HOODFLOW — Security
 
-Status as of this build (Phase 0–11 + Final Intelligence Completion
-phase). This is a living document — update it every time a new attack
-surface (new provider, new route, LLM integration, DB) is added.
+Status as of this build (Phase 0–11 + Final Intelligence Completion phase +
+FINAL GAP CLOSURE phase). This is a living document — update it every time a
+new attack surface (new provider, new route, LLM integration, DB) is added.
+
+## FINAL GAP CLOSURE phase recheck (2026-09-16)
+
+Re-audited specifically against what changed this phase: three new
+`packages/core` modules that process provider-supplied and derived data
+(`ecosystem/ecosystem-engine.ts`, `events/event-engine.ts`,
+`relationships/canonical.ts`), one new `HistoryStore` method
+(`getAllScansSince`), one new `packages/core` module that aggregates across
+tokens (`pulse/pulse-engine.ts`), one new public route
+(`GET /v1/pulse/:chainId`), and five new/extended `apps/web` components
+(`IntelligenceEvents.tsx`, `EcosystemIntelligence.tsx`, `EcosystemPulse.tsx`,
+the new `/pulse/[chainId]` page, `lib/api.ts`'s `fetchPulse`).
+
+- **No new SSRF surface — verified by reading every new module top to
+  bottom.** `ecosystem-engine.ts`, `event-engine.ts`,
+  `relationships/canonical.ts`, and `pulse-engine.ts` are all pure functions
+  over already-fetched, already-validated data — none construct a URL, open
+  a socket, or make an HTTP call. `apps/api/src/routes/pulse.ts` accepts
+  only `chainId` (zod `z.coerce.number().int().positive()`, then checked
+  against the same hardcoded `CHAINS` registry every other route uses) and
+  `window` (a zod enum of five literal strings) — neither is ever used to
+  construct an outbound URL; the route makes zero provider calls at all,
+  only reading from the existing in-process `HistoryStore`.
+- **No arbitrary provider URL input.** Ecosystem Intelligence makes zero new
+  provider calls (see docs/ECOSYSTEM_INTELLIGENCE.md) — it only reads
+  `creatorAddress`/`dexId`/`pairAddress` off data `apps/api/src/pipeline.ts`
+  already fetched this same request, through the same validated
+  `ContractSecurityData`/`LiquiditySnapshot` zod schemas as before this
+  phase.
+- **No false entity attribution.** `core/types/entities.ts`'s constructors
+  build every id from a chain id plus a lowercased address — the exact
+  mechanism that prevents the same address on two different chains from
+  being treated as the same entity. Regression-tested directly:
+  `packages/core/test/ecosystem-engine.test.ts`'s "deployer entity IDs
+  scoped by chain (no cross-chain collision)" case.
+- **No unbounded graph traversal; bounded event/relationship output.**
+  Ecosystem Intelligence only ever produces direct, one-hop relationships
+  from the fields already on that scan's contract/liquidity data — there is
+  no recursive expansion into "this deployer's other tokens" or "this
+  venue's other pairs." Intelligence Events draws from already-bounded
+  inputs (a fixed 4-metric `HistoricalComparison.comparisons` list, a small
+  enum-bounded `TemporalRelationship`/`CrossSourceRelationship` set, at most
+  a handful of ecosystem relationships per scan) and applies a final,
+  defensive `Map`-based dedup-by-id pass before returning — see
+  docs/INTELLIGENCE_EVENTS.md. Robinhood Ecosystem Pulse caps its own output
+  explicitly (`MAX_DETAIL_LINES = 10`, `MAX_EXAMPLE_TOKENS = 10`), so a large
+  tracked-token set can't inflate response size without bound — see
+  docs/ROBINHOOD_ECOSYSTEM_PULSE.md.
+- **No duplicate-event amplification.** `buildIntelligenceEvents()`'s final
+  dedup pass and `ecosystemRelationshipEvents()`'s stable-key comparison
+  against the previous scan's ecosystem relationships (excluding the
+  observation timestamp) together ensure the same real-world change is never
+  re-reported as a "new" event scan after scan — regression-tested in
+  `packages/core/test/event-engine.test.ts` ("no duplicate event IDs",
+  "ECOSYSTEM_RELATIONSHIP_OBSERVED only for genuinely-new relationships").
+- **No false market/score/risk-state override from external or
+  provider-supplied text — verified end-to-end, not just by design.** A new
+  test, `apps/api/test/report.route.test.ts`'s "Security (FINAL GAP CLOSURE
+  phase §9): hostile/injection-like contract+liquidity provider text..."
+  feeds a `creatorAddress` containing `drop table tokens`, an
+  `<script>alert(1)</script>` fragment, and an "ignore all previous
+  instructions" phrase (plus similarly hostile `dexId`/`pairAddress`
+  values) through the real `buildApp`/`buildReport` pipeline and asserts:
+  `marketState.state` is not driven to `DEMAND_EXPANSION` by the hostile
+  text, `score.dataQualityScore` is not driven to 100, the hostile text
+  itself survives intact as inert JSON string data (never silently dropped,
+  since honesty about what was actually observed matters as much as
+  resisting injection), the response `content-type` stays
+  `application/json` (never HTML), and both the event feed and the
+  relationship graph stay within a small bounded size rather than being
+  inflated by the payload. This directly extends the existing hostile-social-
+  text test (same file, same pattern) to this phase's three new
+  capabilities. Passing.
+- **No frontend XSS.** A repository-wide `grep` for `dangerouslySetInnerHTML`
+  in `apps/web` still returns zero matches. The three new/updated components
+  (`IntelligenceEvents.tsx`, `EcosystemIntelligence.tsx`, `EcosystemPulse.tsx`)
+  render every provider-derived string (`summary`, `description`, `evidence`,
+  entity labels/ids, `interpretation`) as ordinary JSX children — React's
+  default escaping — the same pattern every pre-existing component uses.
+- **No unsafe URL construction.** None of the new components construct an
+  `href`/`src` from provider-derived text; entity labels/ids and example
+  token addresses are rendered as plain text only (truncated for display via
+  `lib/format.ts`'s new `truncateId()`, with the full value preserved in a
+  `title` attribute for accessibility/copy — never used to build a link).
+- **No secret leakage.** No new env var was introduced this phase; the new
+  route's log line (`{chainId, window}`) contains no secret-shaped data,
+  matching the existing report route's log-line convention.
+- **No unbounded memory growth from repeated scans/events.**
+  `getAllScansSince()` reads from the same `InMemoryHistoryStore` `Map` that
+  already enforces `MAX_SCANS_PER_TOKEN = 1000` per token (a pre-existing,
+  documented bound — see the Phase 4 recheck below; the known gap of no cap
+  on distinct-token count is unchanged and still tracked there, not
+  reintroduced or worsened by this phase). Pulse itself holds no state
+  between calls — `buildEcosystemPulse()` is stateless, like every other
+  engine in this codebase.
+- **Real-browser verification, not just unit tests.** The new
+  `/pulse/[chainId]` page and the two new report sections were checked with
+  a headless Chromium pass (desktop 1280px + mobile 390px, light + dark
+  `prefers-color-scheme`) against the real running API and web server: zero
+  console errors, zero uncaught page errors, and — after one real defect was
+  found and fixed (see below) — zero horizontal overflow on either new
+  surface.
+  - **Real defect found and fixed during this pass:** `EcosystemIntelligence.tsx`'s
+    initial version rendered full 42-character addresses inside
+    `Badge` components, which use `white-space: nowrap` — this overflowed a
+    390px mobile viewport by ~100px. Fixed by adding `lib/format.ts`'s
+    `truncateId()` and applying it to every address-shaped label rendered
+    inside a badge or a flex row across `EcosystemIntelligence.tsx`,
+    `IntelligenceEvents.tsx`, and `EcosystemPulse.tsx`, with the full value
+    kept in a `title` attribute. Re-verified clean after the fix.
+- **Dependency audit re-run:** `pnpm audit --prod` — **zero known
+  vulnerabilities**, unchanged. No new production dependencies were added
+  this phase (every new module is `packages/core`-internal logic, or uses
+  `zod` — already a dependency — for the new route's input validation).
 
 ## Final Intelligence Completion phase recheck (2026-09-15)
 
@@ -347,8 +461,9 @@ docs/ROADMAP.md.
 
 ## Dependency audit
 
-`pnpm audit --prod` (last run 2026-09-15, Final Intelligence Completion
-phase; previously Phase 11 the same day): **zero known
+`pnpm audit --prod` (last run 2026-09-16, FINAL GAP CLOSURE phase;
+previously 2026-09-15, Final Intelligence Completion phase; before that
+Phase 11 the same day): **zero known
 vulnerabilities**, across both production dependency trees —
 `apps/api` (fastify, @fastify/rate-limit, zod, and the @hoodflow/*
 workspace packages) and `apps/web` (next, react, react-dom). This was not

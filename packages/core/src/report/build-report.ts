@@ -19,6 +19,11 @@ import { analyzeNews } from "../news/news-analyzer.js";
 import { computeAttention } from "../attention/attention-engine.js";
 import { analyzeCrossSource } from "../cross-source/cross-source-engine.js";
 import { buildIntegratedInterpretation } from "../interpretation/integrated-interpretation.js";
+import { buildEcosystemIntelligence } from "../ecosystem/ecosystem-engine.js";
+import { buildIntelligenceEvents, ecosystemRelationshipStableKey } from "../events/event-engine.js";
+import { buildRelationshipGraph } from "../relationships/canonical.js";
+import { tokenEntity } from "../types/entities.js";
+import { RelationshipCategory } from "../types/relationship-graph.js";
 
 const CONFIDENCE_WEIGHT: Record<Confidence, number> = { LOW: 1, MEDIUM: 2, HIGH: 3 };
 
@@ -144,12 +149,17 @@ export function buildReport(snapshot: TokenSnapshot, options: BuildReportOptions
   // and docs/CROSS_SOURCE_INTELLIGENCE.md.
   const prevSocial = options.previousSnapshot?.social;
   const prevSocialSummary = prevSocial ? analyzeSocial(prevSocial.data, prevSocial.state, { now: options.previousSnapshot!.capturedAt }).summary : undefined;
+  const prevNews = options.previousSnapshot?.news;
+  const prevNewsSummary = prevNews ? analyzeNews(prevNews.data, prevNews.state, { now: options.previousSnapshot!.capturedAt }).summary : undefined;
 
   const socialResult = analyzeSocial(snapshot.social?.data, snapshot.social?.state ?? DataState.DATA_UNAVAILABLE, {
     previousSummary: prevSocialSummary,
     now: snapshot.capturedAt,
   });
-  const newsResult = analyzeNews(snapshot.news?.data, snapshot.news?.state ?? DataState.DATA_UNAVAILABLE, { now: snapshot.capturedAt });
+  const newsResult = analyzeNews(snapshot.news?.data, snapshot.news?.state ?? DataState.DATA_UNAVAILABLE, {
+    previousSummary: prevNewsSummary,
+    now: snapshot.capturedAt,
+  });
   signals.push(...socialResult.signals, ...newsResult.signals);
   limitations.push(...socialResult.summary.limitations, ...newsResult.summary.limitations);
 
@@ -179,6 +189,81 @@ export function buildReport(snapshot: TokenSnapshot, options: BuildReportOptions
     limitations,
   });
 
+  // FINAL GAP CLOSURE phase: Ecosystem Intelligence, Intelligence Events, and the Canonical
+  // Relationship Model. Same placement/reasoning as every other post-market-sweep layer above
+  // (identity, historical, social/news/attention/cross-source): purely additive, never an input
+  // to marketState/score.dataQualityScore, computed AFTER marketLimitationsCount was captured.
+  const ecosystem = buildEcosystemIntelligence({
+    chainId: snapshot.token.chainId,
+    address: snapshot.token.address,
+    observedAt: snapshot.capturedAt,
+    contractState: snapshot.contract.state,
+    contract: snapshot.contract.data,
+    liquidityState: snapshot.liquidity.state,
+    liquidity: snapshot.liquidity.data,
+  });
+  limitations.push(...ecosystem.limitations);
+
+  const previousEcosystem = options.previousSnapshot
+    ? buildEcosystemIntelligence({
+        chainId: options.previousSnapshot.token.chainId,
+        address: options.previousSnapshot.token.address,
+        observedAt: options.previousSnapshot.capturedAt,
+        contractState: options.previousSnapshot.contract.state,
+        contract: options.previousSnapshot.contract.data,
+        liquidityState: options.previousSnapshot.liquidity.state,
+        liquidity: options.previousSnapshot.liquidity.data,
+      })
+    : undefined;
+  const previousEcosystemRelationshipIds = new Set(
+    (previousEcosystem?.relationships ?? []).map((rel) => ecosystemRelationshipStableKey(rel)),
+  );
+
+  const events = buildIntelligenceEvents({
+    chainId: snapshot.token.chainId,
+    address: snapshot.token.address,
+    generatedAt: snapshot.capturedAt,
+    history,
+    identityStatus: snapshot.identity.status,
+    identityConfidence: snapshot.identity.confidence,
+    previousIdentityStatus: options.previousSnapshot?.identity.status,
+    signals,
+    social: socialResult.summary,
+    previousSocial: prevSocialSummary,
+    news: newsResult.summary,
+    previousNews: prevNewsSummary,
+    crossSource,
+    ecosystemRelationships: ecosystem.relationships,
+    previousEcosystemRelationshipIds,
+  });
+  limitations.push(...events.limitations);
+
+  const relationshipGraph = buildRelationshipGraph({
+    generatedAt: snapshot.capturedAt,
+    subject: tokenEntity(snapshot.token.chainId, snapshot.token.address),
+    observedAt: snapshot.capturedAt,
+    tokenRelationships: relationships,
+    temporalRelationships: history.relationships,
+    temporalObservedAt: history.currentObservedAt,
+    crossSourceRelationships: crossSource.relationships,
+    ecosystemRelationships: ecosystem.relationships,
+    eventRelationships: events.events.flatMap((event) =>
+      event.relatedEntities.map((object) => ({
+        id: `event-rel:${event.id}:${object.id}`,
+        category: RelationshipCategory.EVENT,
+        relationshipType: "EVENT_INVOLVES_ENTITY",
+        observedAt: event.eventTimestamp,
+        subject: event.subject,
+        object,
+        sourcesInvolved: event.source,
+        evidence: event.evidence,
+        confidence: event.confidence ?? Confidence.LOW,
+        dataState: event.dataState,
+        interpretation: event.description,
+      })),
+    ),
+  });
+
   return {
     token: snapshot.token,
     generatedAt: snapshot.capturedAt,
@@ -204,6 +289,9 @@ export function buildReport(snapshot: TokenSnapshot, options: BuildReportOptions
     history,
     crossSource,
     integratedInterpretation,
+    relationshipGraph,
+    events,
+    ecosystem,
     limitations,
   } satisfies HoodflowReport;
 }

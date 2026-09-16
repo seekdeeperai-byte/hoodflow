@@ -1,9 +1,11 @@
 # HOODFLOW — Roadmap
 
-Status snapshot: 2026-09-15 (Final Intelligence Completion phase — the
-last planned development phase for this build; per that phase's own
-governing spec, this document is not being extended with a new future
-phase list here). Phases below are working-order guesses at the
+Status snapshot: 2026-09-16 (FINAL GAP CLOSURE phase — a corrective phase
+that closed specific architecture and product-completeness gaps identified
+against the Final Intelligence Completion phase's own governing spec; not a
+new open-ended development phase, and this document is still not being
+extended with a new future phase list here). Phases below are working-order
+guesses at the
 dependency graph, adjusted from the product spec's suggested order where
 research showed a better sequence, and — as of Phase 5, and again as of
 Phase 6 — adjusted again based on the actual state of the codebase rather
@@ -151,6 +153,44 @@ again.
       against the real USDG token. See docs/SOCIAL_NEWS_INTELLIGENCE.md,
       docs/HYPE_ATTENTION.md, docs/CROSS_SOURCE_INTELLIGENCE.md, and
       docs/LIVE_VERIFICATION.md's Final Intelligence Completion section.
+- [x] FINAL GAP CLOSURE phase — closed three product-completeness gaps and
+      one architecture defect identified against the Final Intelligence
+      Completion phase's own governing spec: (1) a **Canonical Relationship
+      Model** (`core/types/relationship-graph.ts`,
+      `core/relationships/canonical.ts`) correcting Cross-Source
+      Intelligence's prior status as a structurally incompatible third
+      relationship engine — `relationship-engine.ts` and
+      `temporal-relationship-engine.ts` are unchanged, and their outputs
+      are now combined with Cross-Source, Ecosystem, and Event
+      relationships into one shared envelope,
+      `HoodflowReport.relationshipGraph`, exposed as five categories rather
+      than five incompatible formats; (2) **Intelligence Events**
+      (`core/events`, `HoodflowReport.events`) — a bounded, deterministic,
+      typed "what changed?" feed built entirely from data other engines
+      already computed, zero duplicate analyzers; (3) **Ecosystem
+      Intelligence** (`core/ecosystem`, `HoodflowReport.ecosystem`) — "what
+      is connected to this token?", built from data already fetched
+      (GoPlus creator address, DexScreener dex/pair), zero new provider
+      calls, zero inference from name/symbol alone; (4) **Robinhood
+      Ecosystem Pulse** (`core/pulse`, `GET /v1/pulse/:chainId`) — the
+      first genuinely chain-level view, aggregating over every token
+      actually scanned via one new `HistoryStore.getAllScansSince` method,
+      reusing each token's own already-computed report fields rather than
+      recomputing anything. All four are additive: every pre-existing
+      report field, route, and frontend section is unchanged in shape and
+      behavior (proved by the pre-existing 277 tests all still passing
+      unmodified, plus 37 new tests across `packages/core`/`apps/api` —
+      314 total at the time this phase's verification ran; `apps/web`'s
+      pre-existing 34 tests, included in that 314, also pass unmodified).
+      Frontend:
+      `IntelligenceEvents.tsx`, `EcosystemIntelligence.tsx`, a new
+      `/pulse/[chainId]` page with `EcosystemPulse.tsx`, all rendering
+      neutral (never bullish/bearish) language and verified with a real
+      headless-browser pass (desktop + mobile, light + dark) — one real
+      mobile-overflow defect was found and fixed during that pass (see
+      docs/SECURITY.md's FINAL GAP CLOSURE recheck). See
+      docs/RELATIONSHIP_ARCHITECTURE.md, docs/INTELLIGENCE_EVENTS.md,
+      docs/ECOSYSTEM_INTELLIGENCE.md, docs/ROBINHOOD_ECOSYSTEM_PULSE.md.
 
 ## Remaining known limitations (not a future-phase plan)
 
@@ -161,13 +201,16 @@ gaps carried forward from earlier phases — operational/credential/
 infrastructure limitations, not unstarted product features that this
 build's scope ever covered:
 
-- **Deployer/wallet intelligence.** Never implemented in any phase of this
-  build. Needs Blockscout's transaction/internal-tx endpoints
-  (1,000-record pagination cap per their docs) — a first pass would scope
-  around "does this contract's creator have other deployments" before
-  attempting full wallet-cluster analysis. Blocked, same as Blockscout
-  holder data, on Blockscout's live wire shape remaining unverified
-  (docs/LIVE_VERIFICATION.md).
+- **Deployer/wallet intelligence — partially started, not complete.** The
+  FINAL GAP CLOSURE phase's Ecosystem Intelligence added a single,
+  single-hop `DEPLOYED_BY` relationship (this token → its contract's
+  `creatorAddress`, per GoPlus) — but "does this contract's creator have
+  other deployments," wallet clustering, and transaction-history analysis
+  remain unimplemented. Those need Blockscout's transaction/internal-tx
+  endpoints (1,000-record pagination cap per their docs). `EntityType.WALLET`
+  is modeled in `core/types/entities.ts` for this future work but no builder
+  populates it yet. Blocked, same as Blockscout holder data, on Blockscout's
+  live wire shape remaining unverified (docs/LIVE_VERIFICATION.md).
 - **Multi-point rate/velocity intelligence.** Phase 6 explicitly deferred
   this (see docs/HISTORICAL_INTELLIGENCE.md "Why two-point comparison
   only") — `HistoryStore.getScansSince` is already the right primitive,
@@ -199,6 +242,19 @@ build's scope ever covered:
   as X did before this phase. Both `SocialObservation`/`NewsObservation`
   are shaped so a second client can be added behind the same normalized
   types without touching any downstream analyzer.
+- **Per-source ecosystem entities not yet populated.** `EntityType.NEWS_SOURCE`/
+  `.SOCIAL_SOURCE` and their constructor functions
+  (`core/types/entities.ts`) exist for a future phase that would surface
+  "which outlets/accounts are actually covering this token" as ecosystem
+  entities — no builder creates one yet; Ecosystem Intelligence today only
+  populates `TOKEN`/`CHAIN`/`DEPLOYER`/`LIQUIDITY_VENUE`/`TRADING_PAIR`.
+- **Robinhood Ecosystem Pulse's coverage is bounded by HOODFLOW's own
+  known-token registry, not chain-wide.** `coverage.registrySize` is
+  `chain.knownTokens.length` (3 for chain 4663 as of this phase) — Pulse
+  cannot report on a token that isn't in that registry, even if it exists
+  on-chain, until a real token-discovery mechanism (indexing new contract
+  deployments, ingesting a broader token list) is built. This is stated
+  plainly in the Pulse UI/API rather than implied as "every token."
 
 Phase 8 — Frontend ("What HOODFLOW Sees") and the Final Intelligence
 Completion phase's four new sections are both in "Done" above; the

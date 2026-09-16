@@ -1,5 +1,13 @@
 # HOODFLOW — Data Sources
 
+**FINAL GAP CLOSURE phase note (2026-09-16):** Ecosystem Intelligence,
+Intelligence Events, and Robinhood Ecosystem Pulse (see
+docs/ECOSYSTEM_INTELLIGENCE.md, docs/INTELLIGENCE_EVENTS.md,
+docs/ROBINHOOD_ECOSYSTEM_PULSE.md) introduced **zero new providers and zero
+new credentials**. All three are computed entirely from the same five
+sources listed below (GoPlus, DexScreener, Blockscout, GDELT, X) — this
+table is otherwise unchanged by that phase.
+
 ## Implemented in this build
 
 Status tags (standardized as of Phase 10 — see docs/LIVE_VERIFICATION.md

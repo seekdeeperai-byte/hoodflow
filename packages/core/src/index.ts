@@ -22,4 +22,8 @@ export * from "./social/social-analyzer.js";
 export * from "./news/news-analyzer.js";
 export * from "./attention/attention-engine.js";
 export * from "./cross-source/cross-source-engine.js";
+export * from "./relationships/canonical.js";
+export * from "./ecosystem/ecosystem-engine.js";
+export * from "./events/event-engine.js";
+export * from "./pulse/pulse-engine.js";
 export * from "./report/build-report.js";
