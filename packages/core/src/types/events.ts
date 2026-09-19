@@ -19,6 +19,8 @@ export const EventCategory = {
   HISTORICAL: "HISTORICAL",
   EXTERNAL_CONTEXT: "EXTERNAL_CONTEXT",
   ECOSYSTEM: "ECOSYSTEM",
+  /** Adversarial Intelligence pattern observations — see AdversarialSignalType in types/adversarial.ts. */
+  ADVERSARIAL: "ADVERSARIAL",
 } as const;
 export type EventCategory = (typeof EventCategory)[keyof typeof EventCategory];
 
@@ -48,6 +50,15 @@ export const EventType = {
   CROSS_SOURCE_DIVERGENCE_OBSERVED: "CROSS_SOURCE_DIVERGENCE_OBSERVED",
   EXTERNAL_CONTEXT_UNAVAILABLE: "EXTERNAL_CONTEXT_UNAVAILABLE",
   ECOSYSTEM_RELATIONSHIP_OBSERVED: "ECOSYSTEM_RELATIONSHIP_OBSERVED",
+  /**
+   * At least one Adversarial Intelligence pattern was OBSERVED this scan
+   * (adversarial/adversarial-engine.ts). Named for what it actually is — a
+   * *signal* was detected, not manipulation. It follows the same event rules
+   * as every other type here: evidence-triggered, deterministic id, emitted
+   * only from already-computed data, and never fired for a pattern that
+   * could not be evaluated.
+   */
+  MANIPULATION_SIGNAL_DETECTED: "MANIPULATION_SIGNAL_DETECTED",
 } as const;
 export type EventType = (typeof EventType)[keyof typeof EventType];
 

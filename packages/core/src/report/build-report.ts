@@ -22,6 +22,7 @@ import { buildIntegratedInterpretation } from "../interpretation/integrated-inte
 import { buildEcosystemIntelligence } from "../ecosystem/ecosystem-engine.js";
 import { buildIntelligenceEvents, ecosystemRelationshipStableKey } from "../events/event-engine.js";
 import { buildRelationshipGraph } from "../relationships/canonical.js";
+import { analyzeAdversarial, toCanonicalAdversarialRelationships } from "../adversarial/adversarial-engine.js";
 import { tokenEntity } from "../types/entities.js";
 import { RelationshipCategory } from "../types/relationship-graph.js";
 
@@ -55,7 +56,13 @@ export function buildReport(snapshot: TokenSnapshot, options: BuildReportOptions
   const servedAt = options.servedAt ?? new Date().toISOString();
   const signals: Signal[] = [];
   const limitations: string[] = [];
-  const previousHolderCount = options.previousSnapshot?.holders.data?.holderCount;
+  // Optional-chained through every level, not just `previousSnapshot`: a previous
+  // scan is rehydrated from the HistoryStore (JSON in Postgres), so a legacy or
+  // partially-written record can be missing a whole domain object. `?.holders.data`
+  // would throw on such a record and take down an otherwise-serviceable report —
+  // the same defect class already fixed in pulse-engine.ts. Surfaced by the
+  // Adversarial Intelligence fixture H (malformed history record).
+  const previousHolderCount = options.previousSnapshot?.holders?.data?.holderCount;
 
   if (isUsable(snapshot.contract.state) && snapshot.contract.data) {
     signals.push(...analyzeContract(snapshot.contract.data, snapshot.capturedAt));
@@ -209,15 +216,38 @@ export function buildReport(snapshot: TokenSnapshot, options: BuildReportOptions
         chainId: options.previousSnapshot.token.chainId,
         address: options.previousSnapshot.token.address,
         observedAt: options.previousSnapshot.capturedAt,
-        contractState: options.previousSnapshot.contract.state,
-        contract: options.previousSnapshot.contract.data,
-        liquidityState: options.previousSnapshot.liquidity.state,
-        liquidity: options.previousSnapshot.liquidity.data,
+        // Same legacy/malformed-record defense as previousHolderCount above.
+        contractState: options.previousSnapshot.contract?.state ?? DataState.DATA_UNAVAILABLE,
+        contract: options.previousSnapshot.contract?.data,
+        liquidityState: options.previousSnapshot.liquidity?.state ?? DataState.DATA_UNAVAILABLE,
+        liquidity: options.previousSnapshot.liquidity?.data,
       })
     : undefined;
   const previousEcosystemRelationshipIds = new Set(
     (previousEcosystem?.relationships ?? []).map((rel) => ecosystemRelationshipStableKey(rel)),
   );
+
+  /**
+   * Adversarial Intelligence (MANIPULATION_RADAR). Placed here for the same
+   * reason as every other post-market-sweep layer: it is additive context,
+   * computed after `marketLimitationsCount` was captured, and is never an
+   * input to `marketState` or `score.dataQualityScore`. An unusual pattern
+   * must not silently move a number a user reads as a quality measure.
+   */
+  const adversarial = analyzeAdversarial({
+    now: snapshot.capturedAt,
+    history,
+    identity: snapshot.identity,
+    liquidityState: snapshot.liquidity.state,
+    liquidity: snapshot.liquidity.data,
+    previousLiquidity: options.previousSnapshot?.liquidity?.data,
+    previousLiquidityState: options.previousSnapshot?.liquidity?.state,
+    holdersState: snapshot.holders.state,
+    holders: snapshot.holders.data,
+    social: socialResult.summary,
+    news: newsResult.summary,
+  });
+  limitations.push(...adversarial.limitations);
 
   const events = buildIntelligenceEvents({
     chainId: snapshot.token.chainId,
@@ -226,7 +256,7 @@ export function buildReport(snapshot: TokenSnapshot, options: BuildReportOptions
     history,
     identityStatus: snapshot.identity.status,
     identityConfidence: snapshot.identity.confidence,
-    previousIdentityStatus: options.previousSnapshot?.identity.status,
+    previousIdentityStatus: options.previousSnapshot?.identity?.status,
     signals,
     social: socialResult.summary,
     previousSocial: prevSocialSummary,
@@ -235,6 +265,7 @@ export function buildReport(snapshot: TokenSnapshot, options: BuildReportOptions
     crossSource,
     ecosystemRelationships: ecosystem.relationships,
     previousEcosystemRelationshipIds,
+    adversarialSignals: adversarial.signals,
   });
   limitations.push(...events.limitations);
 
@@ -247,6 +278,10 @@ export function buildReport(snapshot: TokenSnapshot, options: BuildReportOptions
     temporalObservedAt: history.currentObservedAt,
     crossSourceRelationships: crossSource.relationships,
     ecosystemRelationships: ecosystem.relationships,
+    adversarialRelationships: toCanonicalAdversarialRelationships(
+      adversarial,
+      tokenEntity(snapshot.token.chainId, snapshot.token.address),
+    ),
     eventRelationships: events.events.flatMap((event) =>
       event.relatedEntities.map((object) => ({
         id: `event-rel:${event.id}:${object.id}`,
@@ -292,6 +327,7 @@ export function buildReport(snapshot: TokenSnapshot, options: BuildReportOptions
     relationshipGraph,
     events,
     ecosystem,
+    adversarial,
     limitations,
   } satisfies HoodflowReport;
 }

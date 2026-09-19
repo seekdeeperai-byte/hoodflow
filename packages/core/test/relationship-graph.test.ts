@@ -101,7 +101,11 @@ describe("canonical relationship adapters", () => {
     });
 
     expect(graph.relationships).toHaveLength(5);
-    expect(graph.categoryCounts).toEqual({ TOKEN: 1, TEMPORAL: 1, CROSS_SOURCE: 1, ECOSYSTEM: 1, EVENT: 1 });
+    // ADVERSARIAL is the sixth category (adversarial/adversarial-engine.ts). It is 0 here
+    // because this fixture passes no adversarial relationships — the count must still be
+    // present and explicitly zero rather than absent, so a consumer reading
+    // categoryCounts never has to distinguish "no such category" from "none found".
+    expect(graph.categoryCounts).toEqual({ TOKEN: 1, TEMPORAL: 1, CROSS_SOURCE: 1, ECOSYSTEM: 1, EVENT: 1, ADVERSARIAL: 0 });
     // Every relationship, regardless of category, uses the exact same shared shape — reuses
     // the same Confidence/DataState models, never a category-specific parallel scale.
     for (const rel of graph.relationships) {

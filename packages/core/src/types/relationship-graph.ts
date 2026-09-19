@@ -39,6 +39,16 @@ export const RelationshipCategory = {
   ECOSYSTEM: "ECOSYSTEM",
   /** An Intelligence Event's link back to the entity/entities it concerns — events/event-engine.ts. */
   EVENT: "EVENT",
+  /**
+   * Adversarial Intelligence pattern observations — adversarial/adversarial-engine.ts.
+   * Added as a sixth *category* rather than as a second relationship graph,
+   * which is the whole point of this model. It is deliberately not folded
+   * into CROSS_SOURCE: that category means "cross-source-engine.ts's output",
+   * and an adversarial pattern is a different claim (an unusual combination
+   * worth attention) drawn from a different input set, so labelling it
+   * CROSS_SOURCE would make the category field lie about provenance.
+   */
+  ADVERSARIAL: "ADVERSARIAL",
 } as const;
 export type RelationshipCategory = (typeof RelationshipCategory)[keyof typeof RelationshipCategory];
 

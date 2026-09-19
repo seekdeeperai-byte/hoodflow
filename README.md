@@ -13,6 +13,22 @@ trade recommendation. See `docs/` for the full picture; start with
 
 ## Status
 
+**Adversarial Intelligence (2026-09-19).** One new experimental capability,
+**Adversarial Signals** — internal codename `MANIPULATION_RADAR`
+(`HoodflowReport.adversarial`). It asks a single question: *do multiple
+independent observations form an unusual pattern that deserves attention?*
+It deliberately does not answer "is this token manipulated?", and it is built
+so it cannot drift into answering it: no numeric score, no accusatory status,
+severity that stops at ELEVATED, evidence that is structurally required
+rather than optional, and a regression test that fails the build if words
+like "scam", "manipulated" or "caused" ever reach a generated explanation.
+Six patterns, each always reported with one of four statuses so a reader can
+tell *checked and absent* from *never checked*. Zero new providers — every
+input is data another engine already produced. Observed patterns flow into
+the existing canonical relationship graph under a sixth category rather than
+a parallel one. See `docs/ADVERSARIAL_INTELLIGENCE.md`, including the
+patterns deliberately left unimplemented and why.
+
 **FINAL GAP CLOSURE phase (2026-09-16).** On top of the Final Intelligence
 Completion phase below, this corrective phase closed a flagged architecture
 defect and three product-completeness gaps:
@@ -96,7 +112,7 @@ docs/                  Architecture, data sources, scoring, security, roadmap
 ```bash
 pnpm install
 pnpm -r run build
-pnpm test              # 325 tests always run; +9 real Postgres integration tests when DATABASE_URL is set (see docs/HISTORY_SCHEMA.md)
+pnpm test              # 347 tests always run; +9 real Postgres integration tests when DATABASE_URL is set (see docs/HISTORY_SCHEMA.md)
 cp apps/api/.env.example apps/api/.env   # optional: GOPLUS_API_KEY / BLOCKSCOUT_API_KEY / X_BEARER_TOKEN / DATABASE_URL
 cp apps/web/.env.example apps/web/.env.local   # optional: HOODFLOW_API_BASE_URL (defaults to localhost:8787)
 pnpm --filter @hoodflow/api run start    # after build, or `run dev` for tsx watch mode

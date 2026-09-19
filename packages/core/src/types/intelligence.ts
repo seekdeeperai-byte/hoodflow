@@ -278,5 +278,14 @@ export interface HoodflowReport {
    * to this token?" See types/ecosystem.ts and ecosystem/ecosystem-engine.ts.
    */
   ecosystem: import("./ecosystem.js").EcosystemIntelligence;
+  /**
+   * Adversarial Intelligence (MANIPULATION_RADAR) — "do multiple independent
+   * observations form an unusual pattern that deserves attention?" Purely
+   * additive: it is computed after `marketState`/`score` are finalized and is
+   * never an input to either, so it cannot move any pre-existing number in
+   * this report. See types/adversarial.ts and
+   * adversarial/adversarial-engine.ts.
+   */
+  adversarial: import("./adversarial.js").AdversarialIntelligence;
   limitations: string[];
 }

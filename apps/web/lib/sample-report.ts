@@ -13,6 +13,8 @@ import {
   TemporalSequenceStatus,
   TrendDirection,
   TrendType,
+  analyzeAdversarial,
+  toCanonicalAdversarialRelationships,
   buildEcosystemIntelligence,
   buildIntelligenceEvents,
   buildRelationshipGraph,
@@ -289,6 +291,41 @@ const ecosystem = buildEcosystemIntelligence({
   liquidity: { dexId: DEMO_DEX_ID, pairAddress: DEMO_PAIR_ADDRESS, liquidityUsd: 428_000 },
 });
 
+/**
+ * Adversarial Intelligence for the demo report — computed by the real engine
+ * (`analyzeAdversarial`) from the same illustrative figures the rest of this
+ * file uses, exactly like `ecosystem`/`events`/`relationshipGraph` above.
+ * Hand-authoring plausible-looking "manipulation signals" here would be the
+ * single worst place in this codebase to fake data, so nothing below is
+ * hand-written: the demo's liquidity/holder/social/news numbers go in, and
+ * whatever the shipped engine concludes comes out.
+ */
+const adversarial = analyzeAdversarial({
+  now: NOW,
+  history,
+  // The demo token's identity is CONFIRMED, so IDENTITY_NARRATIVE_CONFLICT
+  // correctly comes back NOT_OBSERVED below — the demo does not stage a fake
+  // identity collision just to make the section look busier.
+  identity: {
+    chainId: DEMO_CHAIN_ID,
+    contractAddress: DEMO_ADDRESS,
+    status: IdentityStatus.CONFIRMED,
+    confidence: Confidence.HIGH,
+    match: null,
+    conflicts: [],
+    providerObserved: [],
+    observedAt: NOW,
+  },
+  liquidityState: DataState.AVAILABLE,
+  liquidity: { liquidityUsd: 428_000, buys24h: 612, sells24h: 340 },
+  previousLiquidityState: DataState.AVAILABLE,
+  previousLiquidity: { liquidityUsd: 390_000, buys24h: 180, sells24h: 120 },
+  holdersState: DataState.AVAILABLE,
+  holders: { holderCount: 1_284, top10Pct: 61.4, top20Pct: 72.0 },
+  social: socialSummary,
+  news: newsSummary,
+});
+
 const events = buildIntelligenceEvents({
   chainId: DEMO_CHAIN_ID,
   address: DEMO_ADDRESS,
@@ -301,6 +338,7 @@ const events = buildIntelligenceEvents({
   news: newsSummary,
   crossSource,
   ecosystemRelationships: ecosystem.relationships,
+  adversarialSignals: adversarial.signals,
   // No previous scan is modeled for the demo report, so every ecosystem relationship
   // above is treated as newly observed — matching a real token's first scan.
   previousEcosystemRelationshipIds: new Set<string>(),
@@ -315,6 +353,7 @@ const relationshipGraph = buildRelationshipGraph({
   temporalObservedAt: history.currentObservedAt,
   crossSourceRelationships: crossSource.relationships,
   ecosystemRelationships: ecosystem.relationships,
+  adversarialRelationships: toCanonicalAdversarialRelationships(adversarial, tokenEntity(DEMO_CHAIN_ID, DEMO_ADDRESS)),
   eventRelationships: events.events.flatMap((event) =>
     event.relatedEntities.map((object) => ({
       id: `event-rel:${event.id}:${object.id}`,
@@ -421,5 +460,6 @@ export const DEMO_REPORT: HoodflowReport = {
   relationshipGraph,
   events,
   ecosystem,
+  adversarial,
   limitations: [],
 };

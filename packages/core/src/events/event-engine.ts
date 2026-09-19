@@ -8,6 +8,7 @@ import { type EntityRef, tokenEntity } from "../types/entities.js";
 import type { CanonicalRelationship } from "../types/relationship-graph.js";
 import { fromCrossSourceRelationship, fromTemporalRelationship } from "../relationships/canonical.js";
 import { EventCategory, EventState, EventType, type IntelligenceEvent, type IntelligenceEventFeed } from "../types/events.js";
+import type { AdversarialSignal } from "../types/adversarial.js";
 
 /**
  * Intelligence Events (FINAL GAP CLOSURE phase §4) — "what changed?" as a
@@ -402,6 +403,51 @@ function ecosystemRelationshipEvents(
   return events;
 }
 
+/**
+ * One event per OBSERVED Adversarial Intelligence pattern
+ * (adversarial/adversarial-engine.ts). Follows the same rules as every other
+ * emitter in this file:
+ *
+ * - **Evidence-triggered.** Only OBSERVED signals qualify. A pattern that was
+ *   evaluated and found absent, or that could not be evaluated at all, never
+ *   produces an event — otherwise the feed would fill with non-findings and
+ *   the absence of data would start to look like a finding.
+ * - **Deterministic id**, so re-scanning an unchanged state cannot spam the
+ *   feed with duplicates (the shared dedup map below relies on this).
+ * - **Derived, never recomputed.** Every field is copied from the signal the
+ *   adversarial engine already produced.
+ * - **Significance is capped at MEDIUM.** These are patterns worth a look,
+ *   never confirmed findings, so none of them earns HIGH significance.
+ */
+function adversarialEvents(subject: EntityRef, signals: AdversarialSignal[]): IntelligenceEvent[] {
+  return signals
+    .filter((signal) => signal.status === "OBSERVED")
+    .map((signal) => ({
+      id: eventId(["adversarial", subject.id, signal.type, signal.observedAt]),
+      eventType: EventType.MANIPULATION_SIGNAL_DETECTED,
+      category: EventCategory.ADVERSARIAL,
+      subject,
+      relatedEntities: [],
+      eventTimestamp: signal.observedAt,
+      observedTimestamp: signal.observedAt,
+      significance: signal.severity === "ELEVATED" ? Strength.MEDIUM : Strength.LOW,
+      dataState: DataState.AVAILABLE,
+      confidence: signal.confidence,
+      summary: `Adversarial pattern observed: ${signal.type}`,
+      description: signal.explanation,
+      evidence: signal.evidence.map(
+        (e) => `${e.metric}: ${e.previousValue ?? "unavailable"} -> ${e.currentValue ?? "unavailable"}${e.delta !== null ? ` (delta ${e.delta})` : ""}`,
+      ),
+      source: ["adversarial", ...signal.source],
+      previousValue: null,
+      currentValue: null,
+      delta: null,
+      affectedDimensions: signal.source,
+      relatedRelationshipIds: [],
+      state: EventState.INFERRED,
+    }));
+}
+
 /** Stable key matching `ecosystemRelationshipEvents`'s dedup key — used by build-report.ts to build `previousEcosystemRelationshipIds` from a previous scan's ecosystem relationships. */
 export function ecosystemRelationshipStableKey(rel: Pick<CanonicalRelationship, "subject" | "relationshipType" | "object">): string {
   return eventId([rel.subject.id, rel.relationshipType, rel.object?.id ?? ""]);
@@ -423,6 +469,8 @@ export function buildIntelligenceEvents(input: {
   crossSource: CrossSourceIntelligence;
   ecosystemRelationships: CanonicalRelationship[];
   previousEcosystemRelationshipIds: Set<string>;
+  /** OBSERVED Adversarial Intelligence patterns. Optional so every existing caller/test keeps working unchanged. */
+  adversarialSignals?: AdversarialSignal[];
 }): IntelligenceEventFeed {
   const subject = tokenEntity(input.chainId, input.address);
   const limitations: string[] = [];
@@ -433,6 +481,7 @@ export function buildIntelligenceEvents(input: {
     ...socialNewsAccelerationEvents(subject, input.generatedAt, input.signals),
     ...crossSourceEvents(subject, input.crossSource),
     ...ecosystemRelationshipEvents(subject, input.generatedAt, input.ecosystemRelationships, input.previousEcosystemRelationshipIds),
+    ...adversarialEvents(subject, input.adversarialSignals ?? []),
   ];
 
   const baseline = historyBaselineEvent(subject, input.history);

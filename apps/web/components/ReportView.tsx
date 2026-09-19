@@ -13,11 +13,12 @@ import { Attention } from "./Attention";
 import { CrossSourceIntelligence } from "./CrossSourceIntelligence";
 import { IntelligenceEvents } from "./IntelligenceEvents";
 import { EcosystemIntelligence } from "./EcosystemIntelligence";
+import { AdversarialSignals } from "./AdversarialSignals";
 import { Interpretations } from "./Interpretations";
 import { Monitoring } from "./Monitoring";
 
 /**
- * Assembles the full 9-layer information architecture in the spec's own
+ * Assembles the full information architecture in the spec's own
  * order. Pure presentation: every piece of data displayed already existed
  * on `report` before this component ran — nothing here computes
  * intelligence, it only arranges it.
@@ -41,6 +42,7 @@ export function ReportView({ report, mode }: { report: HoodflowReport; mode: "de
       <CrossSourceIntelligence report={report} />
       <IntelligenceEvents report={report} />
       <EcosystemIntelligence report={report} />
+      <AdversarialSignals report={report} />
       <Interpretations report={report} />
       <Monitoring report={report} />
     </div>

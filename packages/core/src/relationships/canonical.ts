@@ -96,6 +96,13 @@ export function buildRelationshipGraph(input: {
   crossSourceRelationships: CrossSourceRelationship[];
   ecosystemRelationships: CanonicalRelationship[];
   eventRelationships: CanonicalRelationship[];
+  /**
+   * Adversarial Intelligence patterns, already built as CanonicalRelationship
+   * by adversarial/adversarial-engine.ts's adapter — same contract as the
+   * ecosystem and event arrays above. Optional so every existing caller and
+   * test keeps compiling and behaving identically.
+   */
+  adversarialRelationships?: CanonicalRelationship[];
 }): RelationshipGraph {
   const relationships: CanonicalRelationship[] = [
     ...input.tokenRelationships.map((r) => fromTokenRelationship(r, input.subject, input.observedAt)),
@@ -103,6 +110,7 @@ export function buildRelationshipGraph(input: {
     ...input.crossSourceRelationships.map((r) => fromCrossSourceRelationship(r, input.subject)),
     ...input.ecosystemRelationships,
     ...input.eventRelationships,
+    ...(input.adversarialRelationships ?? []),
   ];
 
   const categoryCounts: Record<RelationshipCategory, number> = {
@@ -111,6 +119,7 @@ export function buildRelationshipGraph(input: {
     CROSS_SOURCE: 0,
     ECOSYSTEM: 0,
     EVENT: 0,
+    ADVERSARIAL: 0,
   };
   for (const rel of relationships) categoryCounts[rel.category]++;
 

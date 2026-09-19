@@ -10,3 +10,4 @@ export * from "./relationship-graph.js";
 export * from "./events.js";
 export * from "./ecosystem.js";
 export * from "./pulse.js";
+export * from "./adversarial.js";
