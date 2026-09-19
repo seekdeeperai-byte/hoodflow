@@ -36,6 +36,33 @@ function sourceQualityFor(): SourceQuality {
   return SourceQuality.ESTABLISHED_PUBLISHER;
 }
 
+/**
+ * SECURITY HARDENING (2026-09-16): `article.url` is untrusted third-party
+ * input — GDELT hands us whatever string it indexed, and the schema only
+ * required "a string". That value is served verbatim on the public API as
+ * `NewsObservation.url`. Today nothing renders it as a link (apps/web has
+ * exactly three hardcoded internal `<Link href>`s and renders all external
+ * text as escaped JSX), so there is no live XSS — but a value like
+ * `javascript:...` or `data:text/html,...` sitting in a public API payload
+ * is a loaded gun pointed at the next consumer that does render it, whether
+ * that is a future HOODFLOW UI change or a third-party client of this API.
+ * Validating the scheme here — at the same boundary that already drops
+ * articles missing a title/date rather than guessing at them — keeps that
+ * class of bug structurally impossible instead of relying on every future
+ * consumer to remember. A dropped URL becomes `undefined` ("no usable
+ * link"), never a fabricated one, and never changes whether the article
+ * itself is counted: the observation is still real, it just carries no link.
+ */
+function safeHttpUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? url : undefined;
+  } catch {
+    return undefined; // not a parseable absolute URL — no link rather than a broken/hostile one
+  }
+}
+
 export function normalizeGdeltArticle(
   article: GdeltArticle,
   target: { contractAddress: string; officialName?: string; symbol?: string },
@@ -47,7 +74,7 @@ export function normalizeGdeltArticle(
     source: article.domain ?? "unknown",
     title: article.title,
     publishedAt,
-    url: article.url,
+    url: safeHttpUrl(article.url),
     entityMatch: resolveEntityMention(article.title, target, knownTokens),
     sourceQuality: sourceQualityFor(),
     category: classifyCategory(article.title),

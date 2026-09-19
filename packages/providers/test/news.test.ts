@@ -98,4 +98,33 @@ describe("GdeltNewsClient", () => {
     expect(result.state).toBe(DataState.AVAILABLE);
     expect(result.data?.[0]?.title).toContain("<script>"); // preserved as inert data, not stripped/executed/interpreted
   });
+
+  /**
+   * SECURITY HARDENING regression tests (2026-09-16). `article.url` is
+   * untrusted provider input that is served verbatim on the public API as
+   * `NewsObservation.url`. Only http(s) may survive normalization, so a
+   * `javascript:`/`data:` URL can never reach an API consumer that renders
+   * it as a link. Dropping the URL must never drop the observation itself.
+   */
+  it("drops a non-http(s) article URL (javascript:/data:) rather than serving it on the public API, while keeping the observation", async () => {
+    const fixture = {
+      articles: [
+        { title: "Example Token surges", seendate: "20260914120000", domain: "evil.example", url: "javascript:alert(document.cookie)" },
+        { title: "Example Token again", seendate: "20260914130000", domain: "evil.example", url: "data:text/html,<script>alert(1)</script>" },
+        { title: "Example Token thrice", seendate: "20260914140000", domain: "evil.example", url: "not-a-url-at-all" },
+      ],
+    };
+    const client = new GdeltNewsClient({ fetchImpl: mockFetchOnce(200, fixture) });
+    const result = await client.searchNews("query", TARGET);
+    expect(result.state).toBe(DataState.AVAILABLE);
+    expect(result.data).toHaveLength(3); // observations survive — only the unusable link is dropped
+    expect(result.data?.every((o) => o.url === undefined)).toBe(true);
+  });
+
+  it("preserves a legitimate https article URL unchanged", async () => {
+    const fixture = { articles: [{ title: "Example Token surges", seendate: "20260914120000", domain: "example.com", url: "https://example.com/story/1" }] };
+    const client = new GdeltNewsClient({ fetchImpl: mockFetchOnce(200, fixture) });
+    const result = await client.searchNews("query", TARGET);
+    expect(result.data?.[0]?.url).toBe("https://example.com/story/1");
+  });
 });

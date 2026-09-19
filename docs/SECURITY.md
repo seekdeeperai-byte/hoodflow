@@ -1,8 +1,150 @@
 # HOODFLOW — Security
 
 Status as of this build (Phase 0–11 + Final Intelligence Completion phase +
-FINAL GAP CLOSURE phase). This is a living document — update it every time a
-new attack surface (new provider, new route, LLM integration, DB) is added.
+FINAL GAP CLOSURE phase + Final Security Hardening & SEO pass). This is a
+living document — update it every time a new attack surface (new provider,
+new route, LLM integration, DB) is added.
+
+## Final Security Hardening pass (2026-09-19) — OWASP Top 10:2025
+
+Full audit against OWASP Top 10:2025, tracing real execution paths and
+verifying behavior against the **running production build**, not source
+assumptions. Five real defects were found and fixed; everything else passed
+with evidence. Details:
+
+### Fixed
+
+1. **Health probes were rate-limited (availability defect, runtime-verified).**
+   `/healthz`, `/liveness` and `/readiness` shared the same 30-req/min
+   per-IP budget as the expensive intelligence routes —
+   `x-ratelimit-remaining` was observed decrementing on `/liveness`. A
+   Kubernetes/ECS probe polling even once every two seconds would exhaust
+   that budget and start receiving HTTP 429, which an orchestrator reads as
+   a failed probe: it would restart healthy containers in a loop and pull
+   healthy instances out of the load balancer. Probe traffic also starved
+   real user requests sharing an IP bucket. Fixed with an `allowList` in
+   `apps/api/src/app.ts`; re-verified by firing 20 probes and confirming
+   zero budget consumed and no `x-ratelimit-*` headers on those routes.
+2. **`pg.Pool` idle-connection errors killed the API process (availability
+   defect, runtime-verified).** `pg` emits an `'error'` event when an *idle*
+   pooled connection is terminated by the backend, and an `'error'` event
+   with no listener is rethrown by `EventEmitter` as an uncaught exception.
+   Reproduced by stopping PostgreSQL under a live production server: the
+   process exited with `throw er; // Unhandled 'error' event` /
+   `terminating connection due to administrator command`. This fires on any
+   managed-Postgres maintenance restart or failover, admin-terminated
+   backend, `idle_session_timeout`, or network/LB idle reap — and because
+   it happens on idle clients, it could kill an instance serving no traffic
+   at all. Fixed with a pool `'error'` listener in
+   `apps/api/src/history/postgres-history-store.ts` that logs the message
+   only (never the error object, which can reference the connection config
+   and therefore the database password). A companion fix stops a failed
+   schema bootstrap from being memoized as a permanently-rejected promise.
+   Re-verified: the process now survives the database disappearing,
+   `/liveness` stays 200, the data routes fail closed with a generic 500,
+   and the service **auto-recovers to 200 once PostgreSQL returns** with no
+   restart.
+3. **No HTTP security headers on either service.** Added: CSP,
+   `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
+   `Permissions-Policy`, `Cross-Origin-Opener-Policy` on the frontend
+   (`apps/web/next.config.mjs`), and `nosniff` / `X-Frame-Options` /
+   `Referrer-Policy: no-referrer` / `Cache-Control: no-store` on the API
+   (`apps/api/src/app.ts`). `poweredByHeader: false` removes the
+   `X-Powered-By: Next.js` version disclosure. The API's `no-store` matters
+   for product correctness as well as security: intelligence responses are
+   point-in-time observations carrying their own `dataFreshness` provenance,
+   and a shared proxy serving a heuristically-cached copy would hand a user
+   stale intelligence under a fresh-looking timestamp.
+   **CSP was validated against the real production build in a headless
+   browser** (18 page/viewport/theme combinations plus a dedicated
+   hydration check): zero CSP violations, full hydration, a real live report
+   rendered through the same-origin `/api/v1/*` proxy. `'unsafe-inline'` is
+   retained for `script-src`/`style-src` with the reason documented inline
+   in `next.config.mjs` — Next's App Router inlines its flight payload, and
+   the app renders no user- or provider-supplied HTML anywhere.
+4. **Untrusted provider URL reached the public API unvalidated.** GDELT
+   hands HOODFLOW whatever string it indexed as an article `url`, and it was
+   served verbatim as `NewsObservation.url`. Nothing renders it as a link
+   today (the frontend has exactly three hardcoded internal `<Link href>`s
+   and renders all external text as escaped JSX), so there was no live XSS —
+   but a `javascript:`/`data:` URL sitting in a public API payload is a
+   loaded gun for the next consumer that does render it. Now scheme-checked
+   in `packages/providers/src/news/normalize.ts` at the same boundary that
+   already drops articles missing a title/date; a rejected URL becomes
+   `undefined` ("no usable link") and never drops the observation itself.
+5. **Misleading error codes.** Fastify's default 404 reflected the raw
+   request path back to the caller and used a different body shape from
+   every other error; rate-limit responses were labelled
+   `{"error":"BAD_REQUEST"}`. Both normalized in `apps/api/src/app.ts` —
+   status code and error code now agree (`NOT_FOUND`, `RATE_LIMITED`), and
+   no attacker-controlled input is echoed.
+
+Also closed: **all six dependency advisories** (1 high, 5 moderate — vite /
+esbuild / vitest / launch-editor). All were dev-only and `pnpm audit --prod`
+was already clean, so this was not urgent, but `vitest@4.1.11` + `vite@7`
+resolves them and the **entire 334-test suite, typecheck and production
+build pass unchanged** on the new versions.
+
+### Passed with evidence (not changed)
+
+- **Secrets:** no hardcoded credentials anywhere (`git grep` for
+  key/secret/password/bearer/token patterns returns only env-var names,
+  type/field names and doc prose). `.gitignore` covers `.env`/`.env.*` with
+  an `.env.example` exception, and `git log --all --full-history` confirms
+  no `.env` file was ever committed. No rotation required.
+- **SSRF:** every provider base URL is a hardcoded HTTPS literal in source
+  (`packages/providers/src/{goplus,dexscreener,news,social}/client.ts`,
+  `chains.ts`); `process.env` is read in exactly two places repo-wide
+  (`apps/api/src/config.ts`, `apps/web/next.config.mjs`), neither of which
+  takes user input. No request-derived value ever reaches a URL host/port.
+- **Injection:** every SQL statement in `postgres-history-store.ts` is
+  parameterized (`$1..$n`); addresses are regex-validated
+  (`/^0x[0-9a-fA-F]{40}$/`) before reaching any provider or query; chain ids
+  are zod-coerced then looked up in a fixed registry; the `window` param is
+  a five-value zod enum. Runtime-tested with path-traversal, SQLi-style and
+  malformed inputs — all rejected with a clean 400/404.
+- **XSS:** no `eval`, `new Function`, `document.write`, `innerHTML`, or
+  `child_process` anywhere. The single `dangerouslySetInnerHTML` (added this
+  pass in `app/layout.tsx`) writes a static build-time JSON-LD constant that
+  interpolates no runtime data.
+- **Logging:** logs carry an address *prefix* and error *messages* only —
+  never provider response bodies, credentials, or stack traces.
+  `safeUrlForLog` strips query strings so an API key in a query param could
+  not land in a log. Verified at runtime: zero occurrences of the database
+  password or a connection string across a full crash/recovery cycle.
+- **Authentication:** none exists, deliberately — this is a public,
+  read-only intelligence API with no accounts, sessions, cookies or
+  privileged operations, so there is no session/CSRF/privilege surface, and
+  no code anywhere assumes an authenticated user. Authentication was *not*
+  invented merely to satisfy an OWASP category.
+
+### Accepted risks (documented, not fixed)
+
+- **No `Strict-Transport-Security` header.** HSTS is only appropriate where
+  HTTPS is guaranteed; this build has no TLS deployment yet, and setting it
+  would pin developers' `localhost` to HTTPS. Add it at the TLS-terminating
+  layer when a real domain exists.
+- **`fetchJson` does not cap provider response size and follows redirects.**
+  A compromised provider could return an unbounded body or redirect to an
+  internal address. Both are gated behind first compromising a pinned,
+  TLS-protected, reputable host; response bodies are schema-validated before
+  use; and changing redirect behavior cannot be validated from this sandbox
+  (provider network egress is blocked), so an unverifiable change was not
+  made. Revisit if provider egress becomes testable.
+- **Readiness does not probe the database.** With PostgreSQL down, the data
+  routes correctly return 500 while `/readiness` stays 200. This preserves
+  the deliberate design in `apps/api/src/health.ts` (readiness reflects this
+  instance's own wiring, not third-party reachability); a DB outage affects
+  every instance identically, so failing readiness would convert 500s into
+  503s without improving availability, while adding database load and a new
+  timeout path to every probe. Flagged as a product/ops decision, not a
+  defect.
+- **Report requests with the database down return a generic 500** rather
+  than degrading to an explicit "history store unavailable" report state.
+  Degrading would need a new history status distinct from
+  `INSUFFICIENT_HISTORY` (silently reusing that one would violate
+  `insufficient history != negative evidence`), which is a product change
+  outside this pass's scope. Failing closed is the correct interim behavior.
 
 ## FINAL GAP CLOSURE phase recheck (2026-09-16)
 

@@ -89,6 +89,34 @@ describe.skipIf(!DATABASE_URL)("PostgresHistoryStore (real Postgres integration)
     expect(previous?.snapshot.capturedAt).toBe(sharedTimestamp);
   });
 
+  /**
+   * Regression test for a verified process-killing defect (2026-09-16):
+   * `pg.Pool` emits `'error'` on idle-connection teardown, and an `'error'`
+   * event with no listener is rethrown by EventEmitter as an uncaught
+   * exception — which killed the whole API process whenever PostgreSQL
+   * restarted, failed over, or reaped an idle connection. The store must
+   * register a listener so the event is handled rather than fatal.
+   */
+  it("registers a pool 'error' listener so an idle-connection teardown can never become an uncaught exception", () => {
+    const local = new PostgresHistoryStore(DATABASE_URL!);
+    const pool = (local as unknown as { pool: { listenerCount: (e: string) => number; emit: (e: string, a: unknown) => boolean } }).pool;
+    expect(pool.listenerCount("error")).toBeGreaterThan(0);
+
+    // Emitting 'error' must not throw. Without a listener this line is exactly
+    // what terminates the process in production.
+    expect(() => pool.emit("error", new Error("terminating connection due to administrator command"))).not.toThrow();
+    return (local as unknown as { close: () => Promise<void> }).close();
+  });
+
+  it("routes pool errors to the injected logger as a message only, never the error object (which can reference the connection config/password)", () => {
+    const seen: string[] = [];
+    const local = new PostgresHistoryStore(DATABASE_URL!, (message) => seen.push(message));
+    const pool = (local as unknown as { pool: { emit: (e: string, a: unknown) => boolean } }).pool;
+    pool.emit("error", new Error("terminating connection due to administrator command"));
+    expect(seen).toEqual(["terminating connection due to administrator command"]);
+    return (local as unknown as { close: () => Promise<void> }).close();
+  });
+
   it("returns undefined for getPreviousSnapshot when no prior scan exists", async () => {
     const result = await store.getPreviousSnapshot(
       { chainId: 4663, address: "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },

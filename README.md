@@ -96,7 +96,7 @@ docs/                  Architecture, data sources, scoring, security, roadmap
 ```bash
 pnpm install
 pnpm -r run build
-pnpm test              # 320 tests always run; +6 real Postgres integration tests when DATABASE_URL is set (see docs/HISTORY_SCHEMA.md)
+pnpm test              # 325 tests always run; +9 real Postgres integration tests when DATABASE_URL is set (see docs/HISTORY_SCHEMA.md)
 cp apps/api/.env.example apps/api/.env   # optional: GOPLUS_API_KEY / BLOCKSCOUT_API_KEY / X_BEARER_TOKEN / DATABASE_URL
 cp apps/web/.env.example apps/web/.env.local   # optional: HOODFLOW_API_BASE_URL (defaults to localhost:8787)
 pnpm --filter @hoodflow/api run start    # after build, or `run dev` for tsx watch mode
@@ -109,6 +109,31 @@ curl http://localhost:8787/v1/pulse/4663
 # frontend (in a second terminal, with the API above already running on :8787)
 pnpm --filter @hoodflow/web run dev      # http://localhost:3000
 ```
+
+### Deploying the frontend: one required variable
+
+`HOODFLOW_SITE_URL` must be set **at build time** (`robots.txt`, `sitemap.xml`
+and the home page are statically prerendered, so a runtime-only value is not
+picked up):
+
+```bash
+HOODFLOW_SITE_URL=https://your-domain.example pnpm --filter @hoodflow/web run build
+```
+
+Without it the app runs completely normally but deliberately serves
+`noindex` and a `Disallow: /` robots.txt — a deployment that does not know
+its own public origin cannot emit a truthful canonical URL, and a wrong
+canonical is worse than not being indexed. This also means a preview or
+staging deploy can never leak into a search index by accident. Set
+`HOODFLOW_NOINDEX=true` to force `noindex` on a staging environment that
+does have a real domain. **If production is unexpectedly not indexed, check
+`HOODFLOW_SITE_URL` first.** See `apps/web/lib/site.ts` and
+`apps/web/.env.example`.
+
+Indexability at a glance: the home page is indexed; `/report/:chainId/:address`
+and `/pulse/:chainId` are `noindex, follow` because they are client-rendered
+application views (their server HTML is a loading shell) over an unbounded
+URL space — see `apps/web/app/report/layout.tsx` for the full reasoning.
 
 **Important:** this was built and tested inside a sandbox whose outbound
 network access is policy-restricted to package registries only — the
