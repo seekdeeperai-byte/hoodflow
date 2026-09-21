@@ -22,8 +22,12 @@ export async function buildApp(
   // deploy and for tests; a real deployment passes a shared/persistent HistoryStore in.
   // See docs/HISTORY_SCHEMA.md.
   historyStore: HistoryStore = new InMemoryHistoryStore(),
+  options: { trustProxy?: boolean } = {},
 ): Promise<FastifyInstance> {
-  const app = Fastify({ logger: { level: config.LOG_LEVEL } });
+  // trustProxy: behind a platform proxy (Vercel) the socket peer is the proxy,
+  // so without this every visitor would share ONE rate-limit bucket. Only
+  // enabled where a trusted proxy is guaranteed to set X-Forwarded-For.
+  const app = Fastify({ logger: { level: config.LOG_LEVEL }, trustProxy: options.trustProxy ?? false });
 
   await app.register(rateLimit, {
     max: config.RATE_LIMIT_MAX,
