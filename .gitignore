@@ -12,3 +12,4 @@ coverage/
 out/
 apps/web/next-env.d.ts
 *.tsbuildinfo
+
