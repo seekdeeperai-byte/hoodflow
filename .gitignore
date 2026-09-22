@@ -13,5 +13,3 @@ out/
 apps/web/next-env.d.ts
 *.tsbuildinfo
 
-# Vercel empty static output for apps/api
-apps/api/public/
