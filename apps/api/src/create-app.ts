@@ -16,7 +16,7 @@ export async function createApp(
 ): Promise<FastifyInstance> {
   // DATABASE_URL set -> durable Postgres history; unset -> in-memory (lost on restart).
   const historyStore: HistoryStore = config.DATABASE_URL
-    ? new PostgresHistoryStore(config.DATABASE_URL)
+    ? new PostgresHistoryStore({ connectionString: config.DATABASE_URL, max: config.PG_POOL_MAX })
     : new InMemoryHistoryStore();
 
   const goplus = new GoPlusClient({ apiKey: config.GOPLUS_API_KEY });
@@ -30,5 +30,7 @@ export async function createApp(
   const news = new GdeltNewsClient();
   const social = new XSocialClient({ bearerToken: config.X_BEARER_TOKEN });
 
-  return buildApp(config, { goplus, dexscreener, blockscout, blockscoutChainId: 4663, social, news }, historyStore, options);
+  return buildApp(config, { goplus, dexscreener, blockscout, blockscoutChainId: 4663, social, news }, historyStore, {
+    trustProxy: options.trustProxy ?? config.TRUST_PROXY,
+  });
 }

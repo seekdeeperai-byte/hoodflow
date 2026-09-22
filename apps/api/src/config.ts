@@ -27,6 +27,19 @@ const EnvSchema = z.object({
    * embedded database credentials.
    */
   DATABASE_URL: z.string().optional(),
+  /**
+   * Behind a trusted reverse proxy (Vercel), the socket peer is the proxy, so
+   * the per-IP rate limiter must read X-Forwarded-For instead. Enabled ONLY
+   * where the front layer overwrites that header; a plain string comparison
+   * because z.coerce.boolean() turns the string "false" into true.
+   */
+  TRUST_PROXY: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),
+  /**
+   * Max Postgres connections per process. Serverless runs many short-lived
+   * instances, so each one keeps a small pool (1) instead of pg's default 10,
+   * which would exhaust the database's connection limit.
+   */
+  PG_POOL_MAX: z.coerce.number().int().positive().default(10),
 });
 
 export type Config = z.infer<typeof EnvSchema>;
