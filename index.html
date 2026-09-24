@@ -1,0 +1,45 @@
+<!doctype html>
+<!--
+  Static index for the API origin.
+
+  It exists for two reasons. First, a zero-config Vercel project needs an
+  output directory; this is the smallest honest thing to put in it. Second, a
+  bare API origin that answers "/" with nothing useful invites people to guess
+  at paths — this states the real ones instead.
+
+  Every other path on this origin is rewritten to the Fastify function (see
+  vercel.json), so this file is the only static response the API serves.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>HoodFlow API</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        margin: 0;
+        padding: 48px 20px;
+        font: 15px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        max-width: 42rem;
+      }
+      h1 { font-size: 1.25rem; margin: 0 0 .25rem; }
+      p { margin: 0 0 1rem; opacity: .8; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
+      li { margin-bottom: .35rem; }
+    </style>
+  </head>
+  <body>
+    <h1>HoodFlow API</h1>
+    <p>JSON API for the HoodFlow token-intelligence app. There is no UI here.</p>
+    <ul>
+      <li><code>GET /liveness</code> — is the process responding</li>
+      <li><code>GET /readiness</code> — this instance's own wiring state</li>
+      <li><code>GET /healthz</code> — legacy health check</li>
+      <li><code>GET /v1/report/:chainId/:address</code> — full token report</li>
+      <li><code>GET /v1/pulse/:chainId</code> — ecosystem pulse</li>
+    </ul>
+    <p>Requests are rate limited per client IP. Responses are never cached.</p>
+  </body>
+</html>
