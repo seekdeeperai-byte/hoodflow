@@ -71,6 +71,17 @@ export function NewsIntelligence({ report }: { report: HoodflowReport }) {
           )}
         </>
       )}
-    </section>
+    <div
+      style={{
+        marginTop: 12,
+        paddingTop: 10,
+        borderTop: "1px solid var(--border)",
+        fontSize: 11,
+        color: "var(--muted)",
+      }}
+    >
+      News data powered by GDELT.
+    </div>
+  </section>
   );
 }
