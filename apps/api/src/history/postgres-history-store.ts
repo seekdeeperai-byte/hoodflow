@@ -1,143 +1,182 @@
-From 7145e596d32b1c6bb1fc7b66f25c3199d29e7309 Mon Sep 17 00:00:00 2001
-From: Claude Opus 5 <noreply@anthropic.com>
-Date: Fri, 25 Sep 2026 19:42:57 +0000
-Subject: [PATCH] Fix Postgres serverless schema initialization
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
+import { Pool, type PoolConfig } from "pg";
+import type { HistoryStore, ScanRecord, TokenIdentity } from "@hoodflow/core";
 
-Production hotfix. /v1/report and /v1/pulse returned 500 on every request
-while /readiness stayed green.
+/**
+ * Schema bootstrap DDL, kept identical to apps/api/migrations/001_init.sql.
+ * That .sql file stays the source of truth and carries the full design
+ * rationale for the single-JSONB-row shape; this constant exists only because
+ * reading it from disk at runtime is not portable.
+ *
+ * `ensureSchema()` previously did `readFileSync(join(__dirname, "..", "..",
+ * "migrations", "001_init.sql"))`. That works from a `tsc` build tree but not
+ * from the deployed Vercel function: apps/api/vercel.json bundles `dist/**`
+ * only, so `migrations/001_init.sql` is absent there and the read threw ENOENT
+ * before any query ran. `/readiness` stayed green because it never touches the
+ * store, while every route that does — /v1/report and /v1/pulse — returned
+ * 500. Inlining the statements removes a filesystem dependency from a code
+ * path that only ever needed a string. The statements themselves are
+ * unchanged: same table, same columns, same two indexes, still idempotent.
+ */
+const SCHEMA_DDL = `
+CREATE TABLE IF NOT EXISTS hoodflow_scans (
+  id BIGSERIAL PRIMARY KEY,
+  chain_id INTEGER NOT NULL,
+  address TEXT NOT NULL,
+  captured_at TIMESTAMPTZ NOT NULL,
+  scan_record JSONB NOT NULL,
+  inserted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
-ensureSchema() read the DDL from disk:
+CREATE INDEX IF NOT EXISTS hoodflow_scans_token_time_idx
+  ON hoodflow_scans (chain_id, address, captured_at);
 
-  join(__dirname, "..", "..", "migrations", "001_init.sql")
+CREATE INDEX IF NOT EXISTS hoodflow_scans_chain_time_idx
+  ON hoodflow_scans (chain_id, captured_at);
+`;
 
-apps/api/vercel.json bundles "dist/**" only, so migrations/001_init.sql does
-not exist in the deployed function and readFileSync threw ENOENT before any
-query ran. /readiness never touches the history store, which is why it kept
-reporting ready:true with history:"postgres" — the store was constructed, just
-never usable. hoodflow_scans had 0 rows and had never received an insert.
+/**
+ * Default sink for idle-connection pool errors. Message only — never the
+ * error object, which can reference the pool's connection config (and with
+ * it the database password).
+ */
+function defaultPoolErrorLogger(message: string): void {
+  // eslint-disable-next-line no-console
+  console.error("[hoodflow] PostgreSQL pool error on an idle connection (pool will reconnect):", message);
+}
 
-The DDL is now a constant in the module, so the code path that only ever
-needed a string no longer needs a filesystem. Verified by hiding migrations/
-to reproduce the deployed bundle: before, ENOENT; after, the call reaches the
-database.
+/**
+ * Durable, production-usable HistoryStore implementation — see the design
+ * rationale in apps/api/migrations/001_init.sql for why this stores each
+ * scan as one JSONB row rather than a fully normalized relational schema,
+ * and docs/HISTORY_SCHEMA.md for the original schema sketch this
+ * deliberately departs from.
+ *
+ * Reuses the existing HistoryStore interface (packages/core) unchanged —
+ * this is a second *implementation*, not a second history architecture.
+ * `apps/api/src/server.ts` picks this over InMemoryHistoryStore when
+ * DATABASE_URL is configured; unset, HOODFLOW falls back to the in-memory
+ * store exactly as before (see apps/api/.env.example and README.md's
+ * "Running it" section for the real setup/migration steps).
+ *
+ * Verified against a real, locally-running PostgreSQL 16 instance during
+ * the REAL WORLD DEPLOYMENT verification phase (2026-09-16) — see
+ * apps/api/test/postgres-history-store.test.ts, which only runs when
+ * DATABASE_URL is set and is skipped (not faked, not fixture-mocked)
+ * otherwise. No cloud-managed Postgres credential exists in this sandbox,
+ * so "durable history in a real deployed environment" itself remains
+ * unverified beyond this local instance — see the final report's
+ * DEPLOYMENT section.
+ */
+export class PostgresHistoryStore implements HistoryStore {
+  private readonly pool: Pool;
+  private schemaReady: Promise<void> | undefined;
 
-Nothing about the schema or the history logic changes. Same table, same
-columns, same two indexes, still idempotent (IF NOT EXISTS), same queries.
-apps/api/migrations/001_init.sql is kept as the source of truth and carries
-the design rationale; the embedded statements were compared against it
-statement by statement and are identical.
+  constructor(config: PoolConfig | string, onPoolError: (message: string) => void = defaultPoolErrorLogger) {
+    this.pool = typeof config === "string" ? new Pool({ connectionString: config }) : new Pool(config);
 
-Also includes the GDELT attribution in News & Context (apps/web/components/
-NewsIntelligence.tsx), which production was missing. GDELT grants unlimited
-free use on the condition that any use of the data cites the GDELT Project
-and links to it, so on a live site this is a licence obligation, not styling.
-It renders whether or not news data was available, because the obligation
-attaches to using the API at all.
+    /**
+     * SECURITY HARDENING (2026-09-16) — fixes a verified process-killing
+     * defect, not a theoretical one.
+     *
+     * `pg.Pool` emits an `'error'` event when an **idle** pooled connection is
+     * terminated by the backend. `EventEmitter` rethrows an `'error'` event
+     * that has no listener as an uncaught exception, so before this handler
+     * existed the entire API process exited. Reproduced directly: stopping
+     * PostgreSQL under a running production server killed it with
+     * `throw er; // Unhandled 'error' event` /
+     * `error: terminating connection due to administrator command`.
+     *
+     * That is not an exotic condition — it fires on any managed-Postgres
+     * maintenance restart or failover, any admin-terminated backend, any
+     * `idle_session_timeout`, and any network/load-balancer idle reap. Because
+     * it happens on *idle* clients, it could kill an instance that was serving
+     * no traffic at all, and under an orchestrator it would restart-loop for as
+     * long as the database was unavailable.
+     *
+     * Swallowing the event (after logging it) is the documented, correct
+     * behavior: `pg` discards the broken client and opens a fresh one on the
+     * next checkout. Queries that are actually in flight still reject normally
+     * and surface through the route's own error path — this handler only stops
+     * an idle-socket teardown from being fatal, and never converts a real query
+     * failure into a silent success.
+     *
+     * Only the error *message* is logged. The connection string carries the
+     * database password, and `err` on a pg client can reference connection
+     * config, so the object itself is never logged.
+     */
+    this.pool.on("error", (err: unknown) => {
+      onPoolError(err instanceof Error ? err.message : "Unknown PostgreSQL pool error.");
+    });
+  }
 
-347 tests pass, typecheck clean, all four packages build.
+  /** Idempotent — safe to call on every process start (CREATE TABLE/INDEX IF NOT EXISTS). */
+  private async ensureSchema(): Promise<void> {
+    if (!this.schemaReady) {
+      this.schemaReady = (async () => {
+        await this.pool.query(SCHEMA_DDL);
+      })();
+      // A failed schema bootstrap must not be cached as a permanently-rejected
+      // promise: if the database was merely unreachable at startup, the next
+      // request should be able to retry rather than fail forever on a settled
+      // rejection. The catch below clears the memo, and the rejection is still
+      // propagated to this caller.
+      this.schemaReady.catch(() => {
+        this.schemaReady = undefined;
+      });
+    }
+    return this.schemaReady;
+  }
 
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01TZ9rkb9FpE2BYHpJqrSRRU
----
- .../api/src/history/postgres-history-store.ts | 40 +++++++++++++++----
- apps/web/components/NewsIntelligence.tsx      | 24 +++++++++++
- 2 files changed, 57 insertions(+), 7 deletions(-)
+  async recordScan(entry: ScanRecord): Promise<void> {
+    await this.ensureSchema();
+    const { chainId, address } = entry.snapshot.token;
+    await this.pool.query(
+      `INSERT INTO hoodflow_scans (chain_id, address, captured_at, scan_record) VALUES ($1, $2, $3, $4::jsonb)`,
+      [chainId, address.toLowerCase(), entry.snapshot.capturedAt, JSON.stringify(entry)],
+    );
+  }
 
-diff --git a/apps/api/src/history/postgres-history-store.ts b/apps/api/src/history/postgres-history-store.ts
-index a926b4f..1cb9649 100644
---- a/apps/api/src/history/postgres-history-store.ts
-+++ b/apps/api/src/history/postgres-history-store.ts
-@@ -1,10 +1,38 @@
--import { readFileSync } from "node:fs";
--import { fileURLToPath } from "node:url";
--import { dirname, join } from "node:path";
- import { Pool, type PoolConfig } from "pg";
- import type { HistoryStore, ScanRecord, TokenIdentity } from "@hoodflow/core";
- 
--const __dirname = dirname(fileURLToPath(import.meta.url));
-+/**
-+ * Schema bootstrap DDL, kept identical to apps/api/migrations/001_init.sql.
-+ * That .sql file stays the source of truth and carries the full design
-+ * rationale for the single-JSONB-row shape; this constant exists only because
-+ * reading it from disk at runtime is not portable.
-+ *
-+ * `ensureSchema()` previously did `readFileSync(join(__dirname, "..", "..",
-+ * "migrations", "001_init.sql"))`. That works from a `tsc` build tree but not
-+ * from the deployed Vercel function: apps/api/vercel.json bundles `dist/**`
-+ * only, so `migrations/001_init.sql` is absent there and the read threw ENOENT
-+ * before any query ran. `/readiness` stayed green because it never touches the
-+ * store, while every route that does — /v1/report and /v1/pulse — returned
-+ * 500. Inlining the statements removes a filesystem dependency from a code
-+ * path that only ever needed a string. The statements themselves are
-+ * unchanged: same table, same columns, same two indexes, still idempotent.
-+ */
-+const SCHEMA_DDL = `
-+CREATE TABLE IF NOT EXISTS hoodflow_scans (
-+  id BIGSERIAL PRIMARY KEY,
-+  chain_id INTEGER NOT NULL,
-+  address TEXT NOT NULL,
-+  captured_at TIMESTAMPTZ NOT NULL,
-+  scan_record JSONB NOT NULL,
-+  inserted_at TIMESTAMPTZ NOT NULL DEFAULT now()
-+);
-+
-+CREATE INDEX IF NOT EXISTS hoodflow_scans_token_time_idx
-+  ON hoodflow_scans (chain_id, address, captured_at);
-+
-+CREATE INDEX IF NOT EXISTS hoodflow_scans_chain_time_idx
-+  ON hoodflow_scans (chain_id, captured_at);
-+`;
- 
- /**
-  * Default sink for idle-connection pool errors. Message only — never the
-@@ -85,9 +113,7 @@ export class PostgresHistoryStore implements HistoryStore {
-   private async ensureSchema(): Promise<void> {
-     if (!this.schemaReady) {
-       this.schemaReady = (async () => {
--        const migrationPath = join(__dirname, "..", "..", "migrations", "001_init.sql");
--        const sql = readFileSync(migrationPath, "utf-8");
--        await this.pool.query(sql);
-+        await this.pool.query(SCHEMA_DDL);
-       })();
-       // A failed schema bootstrap must not be cached as a permanently-rejected
-       // promise: if the database was merely unreachable at startup, the next
-diff --git a/apps/web/components/NewsIntelligence.tsx b/apps/web/components/NewsIntelligence.tsx
-index 76e8ddf..858e842 100644
---- a/apps/web/components/NewsIntelligence.tsx
-+++ b/apps/web/components/NewsIntelligence.tsx
-@@ -71,6 +71,30 @@ export function NewsIntelligence({ report }: { report: HoodflowReport }) {
-           )}
-         </>
-       )}
-+
-+      {/*
-+       * REQUIRED ATTRIBUTION — not decoration. GDELT's own terms
-+       * (https://www.gdeltproject.org/about.html) grant unlimited free use
-+       * "for any academic, commercial, or governmental use of any kind
-+       * without fee", on one condition: "any use or redistribution of the
-+       * data must include a citation to the GDELT Project and a link to this
-+       * website." News & Context is built entirely on GDELT DOC 2.0, so this
-+       * line is a licence obligation and must not be removed while that
-+       * provider is in use. It renders whether or not data was available,
-+       * because the obligation attaches to using the API at all.
-+       *
-+       * Note on scope: HOODFLOW stores and displays only GDELT's article
-+       * *metadata* (publisher domain, headline, timestamp, link) — never
-+       * article bodies — so it does not republish news content itself. See
-+       * packages/providers/src/news/normalize.ts.
-+       */}
-+      <p className={styles.muted} style={{ marginTop: 12 }}>
-+        News metadata via the{" "}
-+        <a href="https://www.gdeltproject.org/" target="_blank" rel="noopener noreferrer">
-+          GDELT Project
-+        </a>
-+        . HoodFlow shows headlines, publishers and timestamps only — never article text.
-+      </p>
-     </section>
-   );
- }
--- 
-2.43.0
+  async getPreviousSnapshot(token: TokenIdentity, before: string): Promise<ScanRecord | undefined> {
+    await this.ensureSchema();
+    // `<=`, not `<` — see the identical fix + rationale in InMemoryHistoryStore's
+    // getPreviousSnapshot (packages/core/src/history/in-memory-history-store.ts).
+    // `capturedAt` has only millisecond resolution (JS `Date#toISOString`), so two
+    // distinct, sequential HTTP requests for the same token can share an identical
+    // timestamp; `<=` is safe because the route always calls getPreviousSnapshot
+    // for a scan BEFORE that same scan's own recordScan — it can never match itself.
+    const res = await this.pool.query<{ scan_record: ScanRecord }>(
+      `SELECT scan_record FROM hoodflow_scans
+       WHERE chain_id = $1 AND address = $2 AND captured_at <= $3
+       ORDER BY captured_at DESC LIMIT 1`,
+      [token.chainId, token.address.toLowerCase(), before],
+    );
+    return res.rows[0]?.scan_record;
+  }
+
+  async getScansSince(token: TokenIdentity, since: string): Promise<ScanRecord[]> {
+    await this.ensureSchema();
+    const res = await this.pool.query<{ scan_record: ScanRecord }>(
+      `SELECT scan_record FROM hoodflow_scans
+       WHERE chain_id = $1 AND address = $2 AND captured_at >= $3
+       ORDER BY captured_at ASC`,
+      [token.chainId, token.address.toLowerCase(), since],
+    );
+    return res.rows.map((r) => r.scan_record);
+  }
+
+  async getAllScansSince(chainId: number, since: string): Promise<ScanRecord[]> {
+    await this.ensureSchema();
+    const res = await this.pool.query<{ scan_record: ScanRecord }>(
+      `SELECT scan_record FROM hoodflow_scans
+       WHERE chain_id = $1 AND captured_at >= $2
+       ORDER BY captured_at ASC`,
+      [chainId, since],
+    );
+    return res.rows.map((r) => r.scan_record);
+  }
+
+  /** Releases pool connections — call on graceful shutdown; not part of the HistoryStore interface. */
+  async close(): Promise<void> {
+    await this.pool.end();
+  }
+}
