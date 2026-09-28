@@ -16,12 +16,15 @@ const TITLE = `${SITE_NAME} — ${SITE_TAGLINE}`;
  * that has not been told its own public origin cannot emit a truthful
  * canonical, so it stays out of the index rather than emitting a wrong one.
  *
- * Deliberately absent: any `og:image`/`twitter:image`. There is no real
- * share image in this repository, and pointing at a nonexistent asset would
- * produce a broken social preview — worse than none. Deliberately absent
- * too: any metric, score, or claim about a specific token. Metadata is
- * rendered before any provider data exists, so any number here would be
- * fabricated by definition.
+ * No image is declared here: `app/opengraph-image.tsx` is a file-convention
+ * image route, so Next emits `og:image` *and* `twitter:image` from that one
+ * asset (verified in the built output), each resolved to an absolute URL
+ * against `metadataBase`. A separate `twitter-image.tsx` would only be a
+ * duplicate to keep in sync.
+ *
+ * Deliberately absent: any metric, score, or claim about a specific token,
+ * here or in the share image. Metadata is rendered before any provider data
+ * exists, so any number would be fabricated by definition.
  */
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -51,9 +54,10 @@ export const metadata: Metadata = {
     locale: "en_US",
   },
   twitter: {
-    // "summary" (not summary_large_image): there is no share image, and the
-    // large-image card renders poorly without one.
-    card: "summary",
+    // "summary_large_image" now that app/opengraph-image.tsx exists: the card
+    // is 1200x630, which is what the large-image format expects. This was
+    // "summary" only because there was no image to put in one.
+    card: "summary_large_image",
     title: TITLE,
     description: SITE_DESCRIPTION,
   },
